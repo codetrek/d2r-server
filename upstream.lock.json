@@ -83,6 +83,39 @@
       "power_loss_durability",
       "room_checkpoint_consistency"
     ],
-    "qualified": false
+    "qualified": false,
+    "bounded_observer": {
+      "scope": "darwin-arm64 full_client_singleplayer local explicitly_closed_capture_window",
+      "profile": "d2r-mobile-120fe55-darwin-arm64-transport-v1",
+      "variant_manifest_sha256": "3a0fa652f851e0bb2902b19db9e7431023d152e500bfeddeebfa3923882fc1a7",
+      "variant_host_sha256": "4a0ebff56812a45ae79ba05eac0081b7f01850871a3743e9bc2029210f65c0de",
+      "parent_fixture_manifest_sha256": "0b6b9461317d68d539ee2eb96cddb369518d89edf9ff0bfdebf43a2c4e0d73a8",
+      "capture_integrity_eligible": true,
+      "capture_window_closed": true,
+      "observed": {
+        "world_max_tick": 213,
+        "records": 1284,
+        "send_attempts": 690,
+        "server_send_attempts": 602,
+        "client_send_attempts": 88,
+        "pop_calls": 594,
+        "system_valid_pops": 62,
+        "gameplay_valid_pops": 26,
+        "empty_pops": 506,
+        "errors": 0,
+        "overflow": 0,
+        "thread_violations": 0,
+        "per_channel_every_payload_exact_and_ordered": true,
+        "cross_channel_global_order_claimed": false,
+        "all_connection_ids_local_zero": true,
+        "returned_to_menu": true,
+        "save_commits_after_exit_request": 3,
+        "original_input_backup_unchanged": true,
+        "process_exit_code": 0
+      },
+      "reference": "docs/research/2026-10-20-native-transport-probe.md",
+      "qualifies_game_worker": false,
+      "qualifies_g0": false
+    }
   }
 }

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "name": "d2r-mobile-120fe55-darwin-arm64-transport-v1",
+  "upstream_revision": "120fe55c02a5633476998a44f8c3c3c809fa48b0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "pointer_bytes": 8,
+  "trace_format_version": 1,
+  "modules": {
+    "main": {
+      "filename": "main.patched.bin",
+      "size": 54378496,
+      "sha256": "30384eabe394cbc6b6a0b7f3788983d58dc14a92b7abe1638853dc4833cf81f1"
+    },
+    "sdk": {
+      "filename": "sdk.patched.bin",
+      "size": 15204352,
+      "sha256": "d48f2cc33f3e506d623f873ba447c88fe0aea989b98c4057e2481b6ca3988fa2"
+    }
+  },
+  "build_sources": [
+    "integration.c",
+    "profile.c",
+    "observer.c",
+    "shims.S"
+  ],
+  "build_headers": [
+    "format.h",
+    "abi.h",
+    "probe.h",
+    "internal.h"
+  ],
+  "integration_source": "integration.c",
+  "main_translation_unit_define": "run_module_inits=d2r_observed_run_module_inits",
+  "wrapper_symbol": "d2r_observed_run_module_inits",
+  "original_init_symbol": "run_module_inits",
+  "required_symbols": [
+    "d2r_observed_run_module_inits",
+    "run_module_inits",
+    "d2r_probe_server_send",
+    "d2r_probe_client_send",
+    "d2r_probe_system_pop",
+    "d2r_probe_gameplay_pop"
+  ],
+  "required_environment": [
+    "D2R_PROBE_MODULES",
+    "D2R_TRANSPORT_TRACE",
+    "D2R_PROBE_STOP_PATH"
+  ]
+}
