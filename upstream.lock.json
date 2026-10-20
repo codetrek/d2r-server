@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "purpose": "Static provenance record for research and future dependency qualification; not an installed SDK or runtime dependency.",
+  "purpose": "Static provenance and bounded research qualification record; not an installed SDK, runtime configuration, qualified room worker, or multiplayer dependency.",
   "upstream": {
     "repository": "https://github.com/jhaizhou-ops/d2r-mobile",
     "revision": "120fe55c02a5633476998a44f8c3c3c809fa48b0",
@@ -29,13 +29,60 @@
       "sha256": "30384eabe394cbc6b6a0b7f3788983d58dc14a92b7abe1638853dc4833cf81f1",
       "size_bytes": 54378496,
       "purpose": "analysis_only_not_executable",
+      "distribution": "private_output_only",
+      "module": "main",
+      "layout_profile": "dm-split-sections-v1"
+    },
+    "sdk_fixups": {
+      "name": "sdk.fixups.tsv",
+      "sha256": "6ed319abfaa399ae5c448735a9f10e889dd812fd6445975a6912b643cfa63b6d",
+      "size_bytes": 272,
+      "distribution": "private_input_only"
+    },
+    "sdk_reconstructed_image": {
+      "name": "sdk.patched.reconstructed.bin",
+      "sha256": "d48f2cc33f3e506d623f873ba447c88fe0aea989b98c4057e2481b6ca3988fa2",
+      "size_bytes": 15204352,
+      "module": "sdk",
+      "layout_profile": "dm-split-sections-v1",
+      "purpose": "static_reconstructed_module_not_standalone_executable",
       "distribution": "private_output_only"
     }
   },
   "runtime_qualification": {
-    "guest_execution": false,
+    "guest_execution": true,
+    "guest_execution_scope": {
+      "platform": "macos-arm64",
+      "runtime": "full_client_singleplayer",
+      "host_hardware": "Apple M4",
+      "qualification": "bounded_local_world_and_normal_save_exit_only",
+      "reference": "docs/research/2026-10-20-mac-runtime-fixture.md"
+    },
+    "game_worker_qualified": false,
     "linux_game_worker": false,
     "multiplayer": false,
-    "gates_passed": []
+    "two_process_transport": false,
+    "gates_passed": [],
+    "observed": {
+      "fixture_manifest_sha256": "0b6b9461317d68d539ee2eb96cddb369518d89edf9ff0bfdebf43a2c4e0d73a8",
+      "host_sha256": "b15bbc0bfbe7e63a6368c3988258f1844fa216d7a512b5e63d6fde3516beb9a4",
+      "shader_chain": "25119b57670f",
+      "world_max_tick": 159,
+      "returned_to_menu": true,
+      "save_commits_after_exit_request": 3,
+      "character_output_changed": true,
+      "original_input_backup_unchanged": true,
+      "process_exit_code": 0
+    },
+    "unproven": [
+      "linux_headless_engine",
+      "remote_admission",
+      "multiplayer_state_ownership",
+      "two_process_guest_transport",
+      "crash_recovery",
+      "power_loss_durability",
+      "room_checkpoint_consistency"
+    ],
+    "qualified": false
   }
 }

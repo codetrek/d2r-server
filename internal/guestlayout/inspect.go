@@ -14,9 +14,8 @@ import (
 	"slices"
 )
 
-const ImageName = "main.patched.reconstructed.bin"
-
 type Options struct {
+	Module     Module
 	GuestPath  string
 	FixupsPath string
 	OutputDir  string
@@ -30,6 +29,8 @@ type Artifact struct {
 
 type Manifest struct {
 	SchemaVersion                  int               `json:"schema_version"`
+	Module                         Module            `json:"module"`
+	LayoutProfile                  string            `json:"layout_profile"`
 	Generator                      string            `json:"generator"`
 	Purpose                        string            `json:"purpose"`
 	Guest                          Artifact          `json:"input_guest"`
@@ -47,6 +48,10 @@ type Manifest struct {
 // Inspect publishes a complete new directory with no replacement of an existing
 // destination. Only the directory created by this invocation is cleaned up.
 func Inspect(options Options) (_ *Manifest, resultErr error) {
+	profile, err := profileFor(options.Module)
+	if err != nil {
+		return nil, err
+	}
 	if options.GuestPath == "" || options.FixupsPath == "" || options.OutputDir == "" {
 		return nil, fmt.Errorf("guest, fixups and output directory paths are required")
 	}
@@ -71,7 +76,7 @@ func Inspect(options Options) (_ *Manifest, resultErr error) {
 	if !guestInfo.Mode().IsRegular() {
 		return nil, fmt.Errorf("Guest must be a regular file")
 	}
-	sections, err := readMachO(guest, uint64(guestInfo.Size()))
+	sections, err := readMachO(guest, uint64(guestInfo.Size()), profile)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +107,7 @@ func Inspect(options Options) (_ *Manifest, resultErr error) {
 			}
 		}
 	}()
-	image, err := writeImage(filepath.Join(staging, ImageName), guest, sections, expectedSectionDigests)
+	image, err := writeImage(filepath.Join(staging, profile.imageName), guest, sections, expectedSectionDigests)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +123,9 @@ func Inspect(options Options) (_ *Manifest, resultErr error) {
 	}
 	fixupDigest := sha256.Sum256(fixupBytes)
 	manifest := &Manifest{
-		SchemaVersion: 1, Generator: "github.com/codetrek/d2r-server/cmd/d2r-inspect",
-		Purpose:     "Static reconstruction of patched main bytes in loader order; not a runnable server or executable.",
+		SchemaVersion: 2, Module: profile.module, LayoutProfile: splitSectionsProfile,
+		Generator:   "github.com/codetrek/d2r-server/cmd/d2r-inspect",
+		Purpose:     fmt.Sprintf("Static reconstruction of patched %s bytes in loader order; not a runnable server or executable.", profile.module),
 		Guest:       Artifact{Name: filepath.Base(options.GuestPath), Size: uint64(guestInfo.Size()), SHA256: guestDigest},
 		Fixups:      Artifact{Name: filepath.Base(options.FixupsPath), Size: uint64(len(fixupBytes)), SHA256: hex.EncodeToString(fixupDigest[:])},
 		FixupValues: values, Reconstructed: image, Sections: sections, SourceSectionsVerified: true,
@@ -195,7 +201,7 @@ func writeImage(path string, source io.ReaderAt, sections []Section, expected ma
 	if err := file.Sync(); err != nil {
 		return Artifact{}, fmt.Errorf("sync reconstructed image: %w", err)
 	}
-	return Artifact{Name: ImageName, Size: size, SHA256: hex.EncodeToString(imageHash.Sum(nil))}, nil
+	return Artifact{Name: filepath.Base(path), Size: size, SHA256: hex.EncodeToString(imageHash.Sum(nil))}, nil
 }
 
 func writeManifest(path string, manifest *Manifest) (resultErr error) {

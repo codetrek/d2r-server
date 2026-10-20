@@ -8,3 +8,7 @@ coverage
 **/*.xci
 **/*.d2s
 **/*.d2i
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
