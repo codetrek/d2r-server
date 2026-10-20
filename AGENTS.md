@@ -20,7 +20,10 @@
   each admission, and Linux/Docker deployment. The game worker CPU is undecided.
 - G0–G5 remain unpassed. A fixed macOS ARM64 full-client single-player baseline
   has entered a world, advanced 159 ticks, saved through the normal exit path,
-  and returned to the menu. This proves that bounded Mac execution only; it does
+  and returned to the menu. A separately built native observer later recorded a
+  213-tick local movement run: all 62 system and 26 gameplay inputs matched
+  their per-channel postpop bytes in order. This remains bounded single-process
+  local observation, not cross-channel global ordering. It does
   not qualify Linux, a room worker, two-process transport, or multiplayer.
 - Preserve the exact fixture, host, shader-chain, and run receipt identities.
   Source inspection, reconstructed bytes, Go cross-compilation, synthetic fixture
@@ -39,9 +42,13 @@
   demonstrated purpose. Use `make` so caches and temporary files stay in `.tmp`.
 - Run `make check` and checks relevant to changed platform code. `make check`
   runs command tests separately from core coverage, without duplicating tests.
+  `make build` and cross-build include the compact `d2r-trace` reader.
 - Python fixture tooling lives in `tools/mac-fixture/` and uses uv with its
   committed lockfile. Run `make fixture-test` for locked Python 3.12 synthetic
   tests. Keep uv, Python installations, environments, and caches under `.tmp`.
+  The probe builder only prepares an independent `built_unexecuted` variant.
+  `make native-probe-test` requires Darwin ARM64 and uses synthetic originals;
+  run the relevant native/sanitizer checks when changing observer code.
 - The fixture preparation command builds a private candidate and never executes
   the game or installs system tools. Actual execution requires a separate owned
   experiment with explicit input, network, write, lifecycle, and cleanup bounds.
@@ -53,6 +60,11 @@
 - Record primary-source links for non-obvious platform and function-address
   assumptions. Preserve TLS/SVC wrappers, guest thread context, and buffer
   lifetimes; analysis-body offsets are not standalone ABI call entries.
+- Native traces describe attempts and postpop observations, never proven network
+  deliveries. Require explicit `D2R_PROBE_STOP_PATH` capture admission closure
+  and draining; the host uses `_exit`, so atexit cannot close the capture. Keep
+  incomplete/error/gap/overflow/foreign-thread captures ineligible. Closure covers
+  only the declared interval. Raw traces stay private; reports omit payloads.
 - Real game files, saves, settings, player names, screenshots, raw pseudocode,
   REA sessions, local review logs, and portable tools remain ignored in `.tmp`.
 - Write user-facing documentation in Chinese. Rewrite affected documents

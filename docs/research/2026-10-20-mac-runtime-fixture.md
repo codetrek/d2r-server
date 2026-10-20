@@ -2,7 +2,7 @@
 
 日期：2026-10-20。范围：macOS / ARM64、完整游戏客户端、单人本地世界。**这不是 Linux 房间工作进程资格记录，G0–G5 均未通过。**
 
-本报告承接 [G0 静态传输边界](2026-10-20-g0-transport-boundaries.md)。该报告中的源码、Hopper/Ghidra、队列及长度结论保持有效；本报告另行记录实际的 Mac 构建、资源准备、进入世界和保存退出证据。产品仍报告 `game_worker: "unavailable"`、`multiplayer_available: false`，`/readyz` 返回 503。
+本报告承接 [G0 静态传输边界](2026-10-20-g0-transport-boundaries.md)。该报告中的源码、Hopper/Ghidra、队列及长度结论保持有效；本报告另行记录实际的 Mac 构建、资源准备、进入世界和保存退出证据。后续[原生观察报告](2026-10-20-native-transport-probe.md)固定另一份观察二进制并记录 213 tick 与逐通道消息对照；本报告保留历史基线 159 tick，不合并不同宿主的结果。产品仍报告 `game_worker: "unavailable"`、`multiplayer_available: false`，`/readyz` 返回 503。
 
 ## 本次交付与证明范围
 
@@ -99,8 +99,8 @@ C1 元数据按实际 MSL 与当前链重新生成，并与 `shader_map.tsv`、�
 
 ## 构建检查与下一项验证
 
-`make check` 的 Go 核心覆盖率为 **88.6%**；`guestlayout` 为 86.3%、`guestingress` 为 90.6%、`control` 为 98.3%。`make fixture-test` 的 17 项 Python 合成测试通过。CI 已配置固定版本的 uv 和 Python 3.12，在 Linux/macOS 上运行纯合成准备工具测试；本分支远程 CI 结果应按实际运行单独核对，配置不代表已通过。
+本基线变更时的 `make check` Go 核心覆盖率为 **88.6%**；`guestlayout` 为 86.3%、`guestingress` 为 90.6%、`control` 为 98.3%。当时 `make fixture-test` 的 17 项 Python 合成测试通过；后续观察工具的当前测试与 23 项结果见[开发说明](../development.md)。CI 已配置固定版本的 uv 和 Python 3.12，在 Linux/macOS 上运行纯合成准备工具测试；本分支远程 CI 结果应按实际运行单独核对，配置不代表已通过。
 
 公开准备工具的便携输入命令及依赖说明见[工具文档](../../tools/mac-fixture/README.md)，仓库缓存和测试入口见[开发说明](../development.md)。准备完成后没有自动启动游戏的命令。
 
-下一项 G0 验证可以使用这个固定 Mac 基线建立受控消息跟踪、原有本地链路透传对照及双进程往返，并补齐完整入场、待处理回调与 S2C 生命周期。Linux 平台适配、无 GPU 权威逻辑和四人一致性仍需分别验证。服务器 CPU 保持待定；Mac ARM64 单机执行不能决定 Linux 部署架构。
+后续独立观察变体已取得受控本地输入/出队对照。下一项 G0 验证继续推进消费端跟踪、生命周期及双进程往返，并补齐完整入场、待处理回调与 S2C 生命周期。Linux 平台适配、无 GPU 权威逻辑和四人一致性仍需分别验证。服务器 CPU 保持待定；Mac ARM64 单机执行不能决定 Linux 部署架构。

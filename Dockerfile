@@ -12,12 +12,14 @@ ARG TARGETOS
 ARG TARGETARCH
 ENV CGO_ENABLED=0
 RUN GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -trimpath -ldflags="-s -w" -o /out/d2r-server ./cmd/d2r-server \
-    && GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -trimpath -ldflags="-s -w" -o /out/d2r-inspect ./cmd/d2r-inspect
+    && GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -trimpath -ldflags="-s -w" -o /out/d2r-inspect ./cmd/d2r-inspect \
+    && GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -trimpath -ldflags="-s -w" -o /out/d2r-trace ./cmd/d2r-trace
 
 FROM scratch
 USER 65532:65532
 COPY --from=build /out/d2r-server /usr/local/bin/d2r-server
 COPY --from=build /out/d2r-inspect /usr/local/bin/d2r-inspect
+COPY --from=build /out/d2r-trace /usr/local/bin/d2r-trace
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/d2r-server"]
 CMD ["-listen", "0.0.0.0:8080"]

@@ -1,12 +1,13 @@
 [project]
 name = "d2r-mac-fixture"
 version = "0.1.0"
-description = "Prepare a private, unexecuted macOS guest fixture from owned inputs"
+description = "Prepare private macOS guest fixtures and build explicit native observer variants"
 requires-python = ">=3.11"
 dependencies = ["Pillow==11.3.0", "lz4==4.4.5"]
 
 [project.scripts]
 d2r-mac-fixture = "d2r_mac_fixture.cli:main"
+d2r-mac-probe-build = "d2r_mac_fixture.probe_build:main"
 
 [build-system]
 requires = ["hatchling==1.27.0"]
