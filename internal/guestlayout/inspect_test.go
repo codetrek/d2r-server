@@ -15,7 +15,14 @@ import (
 	"testing"
 )
 
-func syntheticGuest() ([]byte, string, []byte) {
+func syntheticGuest(module Module) ([]byte, string, []byte) {
+	names := map[Module][3]string{
+		ModuleMain: {"__dmmainx0", "__DMmainW", "__dmmainx1"},
+		ModuleSDK:  {"__dmsdkx0", "__DMsdkW", "__dmsdkx1"},
+	}[module]
+	if names[0] == "" {
+		panic("unsupported synthetic module")
+	}
 	data := make([]byte, 0x1c000)
 	u32, u64 := binary.LittleEndian.PutUint32, binary.LittleEndian.PutUint64
 	u32(data[0:4], 0xfeedfacf)
@@ -44,10 +51,10 @@ func syntheticGuest() ([]byte, string, []byte) {
 		u32(data[at+52:at+56], 14)
 	}
 	segment(32, "__TEXT", 0x4000, 0x8000, 2, 5)
-	section(104, "__dmmainx0", "__TEXT", 0x4000, 0x4000)
-	section(184, "__dmmainx1", "__TEXT", 0x8000, 0x4000)
-	segment(264, "__DMmainW", 0xc000, 0x10000, 1, 3)
-	section(336, "__img", "__DMmainW", 0xc000, 0x10000)
+	section(104, names[0], "__TEXT", 0x4000, 0x4000)
+	section(184, names[2], "__TEXT", 0x8000, 0x4000)
+	segment(264, names[1], 0xc000, 0x10000, 1, 3)
+	section(336, "__img", names[1], 0xc000, 0x10000)
 	for index := 0x4000; index < len(data); index++ {
 		data[index] = byte((index/0x4000)*37 + index%251)
 	}
@@ -60,10 +67,10 @@ func syntheticGuest() ([]byte, string, []byte) {
 	return data, fixups, expected
 }
 
-func writeInputs(t *testing.T, data []byte, fixups string) Options {
+func writeInputs(t *testing.T, module Module, data []byte, fixups string) Options {
 	t.Helper()
 	dir := t.TempDir()
-	options := Options{GuestPath: filepath.Join(dir, "Guest"), FixupsPath: filepath.Join(dir, "main.fixups.tsv"), OutputDir: filepath.Join(dir, "result")}
+	options := Options{Module: module, GuestPath: filepath.Join(dir, "Guest"), FixupsPath: filepath.Join(dir, string(module)+".fixups.tsv"), OutputDir: filepath.Join(dir, "result")}
 	if err := os.WriteFile(options.GuestPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -74,13 +81,20 @@ func writeInputs(t *testing.T, data []byte, fixups string) Options {
 }
 
 func TestInspectReconstructsLoaderOrder(t *testing.T) {
-	data, fixups, expected := syntheticGuest()
-	options := writeInputs(t, data, fixups)
+	for _, module := range []Module{ModuleMain, ModuleSDK} {
+		t.Run(string(module), func(t *testing.T) { checkReconstruction(t, module) })
+	}
+}
+
+func checkReconstruction(t *testing.T, module Module) {
+	t.Helper()
+	data, fixups, expected := syntheticGuest(module)
+	options := writeInputs(t, module, data, fixups)
 	manifest, err := Inspect(options)
 	if err != nil {
 		t.Fatal(err)
 	}
-	actual, err := os.ReadFile(filepath.Join(options.OutputDir, ImageName))
+	actual, err := os.ReadFile(filepath.Join(options.OutputDir, string(options.Module)+".patched.reconstructed.bin"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,6 +105,9 @@ func TestInspectReconstructsLoaderOrder(t *testing.T) {
 	guestDigest := sha256.Sum256(data)
 	if manifest.Reconstructed.SHA256 != hex.EncodeToString(digest[:]) || manifest.Guest.SHA256 != hex.EncodeToString(guestDigest[:]) || manifest.Reconstructed.Size != uint64(len(expected)) {
 		t.Fatal("manifest provenance mismatch")
+	}
+	if manifest.SchemaVersion != 2 || manifest.Module != module || manifest.LayoutProfile != "dm-split-sections-v1" || manifest.Reconstructed.Name != string(module)+".patched.reconstructed.bin" {
+		t.Fatal("manifest does not identify the exact module and layout profile")
 	}
 	if manifest.Sections[1].Name != "__img" || manifest.Sections[1].ReconstructedStart != 0x4000 || manifest.Sections[2].ReconstructedStart != 0x14000 {
 		t.Fatal("incorrect source-to-reconstructed mappings")
@@ -110,7 +127,7 @@ func TestInspectReconstructsLoaderOrder(t *testing.T) {
 	if err := json.Unmarshal(stored, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded.RelocationsApplied || decoded.RuntimeInitializationPerformed || decoded.CodeSignatureVerified || !decoded.SourceSectionsVerified || bytes.Contains(stored, []byte(filepath.Dir(options.GuestPath))) {
+	if decoded.Module != module || decoded.LayoutProfile != "dm-split-sections-v1" || decoded.SchemaVersion != 2 || decoded.RelocationsApplied || decoded.RuntimeInitializationPerformed || decoded.CodeSignatureVerified || !decoded.SourceSectionsVerified || bytes.Contains(stored, []byte(filepath.Dir(options.GuestPath))) {
 		t.Fatal("manifest claims unsupported work")
 	}
 	assertNoStaging(t, options.OutputDir)
@@ -143,8 +160,8 @@ func TestInspectRejectsMalformedGuestWithoutPublishing(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			data, fixups, _ := syntheticGuest()
-			options := writeInputs(t, tc.edit(data), fixups)
+			data, fixups, _ := syntheticGuest(ModuleMain)
+			options := writeInputs(t, ModuleMain, tc.edit(data), fixups)
 			if _, err := Inspect(options); err == nil {
 				t.Fatal("accepted malformed Guest")
 			}
@@ -179,8 +196,8 @@ func TestInspectRejectsInvalidFixupsWithoutPublishing(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			data, fixups, _ := syntheticGuest()
-			options := writeInputs(t, data, tc.edit(fixups))
+			data, fixups, _ := syntheticGuest(ModuleMain)
+			options := writeInputs(t, ModuleMain, data, tc.edit(fixups))
 			if _, err := Inspect(options); err == nil {
 				t.Fatal("accepted invalid fixups")
 			}
@@ -192,8 +209,8 @@ func TestInspectRejectsInvalidFixupsWithoutPublishing(t *testing.T) {
 func TestInspectPreservesExistingOutput(t *testing.T) {
 	for _, kind := range []string{"file", "empty directory", "nonempty directory", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
-			data, fixups, _ := syntheticGuest()
-			options := writeInputs(t, data, fixups)
+			data, fixups, _ := syntheticGuest(ModuleMain)
+			options := writeInputs(t, ModuleMain, data, fixups)
 			switch kind {
 			case "file":
 				if err := os.WriteFile(options.OutputDir, []byte("keep"), 0o600); err != nil {
@@ -230,8 +247,8 @@ func TestInspectPreservesExistingOutput(t *testing.T) {
 }
 
 func TestConcurrentPublicationHasExactlyOneWinner(t *testing.T) {
-	data, fixups, expected := syntheticGuest()
-	options := writeInputs(t, data, fixups)
+	data, fixups, expected := syntheticGuest(ModuleMain)
+	options := writeInputs(t, ModuleMain, data, fixups)
 	const count = 8
 	results := make(chan error, count)
 	var group sync.WaitGroup
@@ -251,7 +268,7 @@ func TestConcurrentPublicationHasExactlyOneWinner(t *testing.T) {
 	if successes != 1 {
 		t.Fatalf("got %d successful publishers", successes)
 	}
-	image, err := os.ReadFile(filepath.Join(options.OutputDir, ImageName))
+	image, err := os.ReadFile(filepath.Join(options.OutputDir, string(options.Module)+".patched.reconstructed.bin"))
 	if err != nil || !bytes.Equal(image, expected) {
 		t.Fatal("published image is incomplete")
 	}

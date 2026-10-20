@@ -21,9 +21,7 @@ type Section struct {
 	SHA256             string `json:"sha256"`
 }
 
-var layoutNames = [3][2]string{{"__TEXT", "__dmmainx0"}, {"__DMmainW", "__img"}, {"__TEXT", "__dmmainx1"}}
-
-func readMachO(r io.ReaderAt, fileSize uint64) ([]Section, error) {
+func readMachO(r io.ReaderAt, fileSize uint64, profile layoutProfile) ([]Section, error) {
 	var header [32]byte
 	if _, err := r.ReadAt(header[:], 0); err != nil {
 		return nil, fmt.Errorf("read Mach-O header: %w", err)
@@ -51,7 +49,7 @@ func readMachO(r io.ReaderAt, fileSize uint64) ([]Section, error) {
 			return nil, fmt.Errorf("Mach-O load command %d: invalid size %d", index, size)
 		}
 		if kind == 0x19 {
-			if err := readSegment(r, position, size, fileSize, selected); err != nil {
+			if err := readSegment(r, position, size, fileSize, profile, selected); err != nil {
 				return nil, fmt.Errorf("Mach-O load command %d: %w", index, err)
 			}
 		}
@@ -60,8 +58,8 @@ func readMachO(r io.ReaderAt, fileSize uint64) ([]Section, error) {
 	if position != commandEnd {
 		return nil, fmt.Errorf("Mach-O load command sizes do not equal sizeofcmds")
 	}
-	sections := make([]Section, 0, len(layoutNames))
-	for _, name := range layoutNames {
+	sections := make([]Section, 0, len(profile.sectionNames))
+	for _, name := range profile.sectionNames {
 		section, exists := selected[name]
 		if !exists {
 			return nil, fmt.Errorf("missing Mach-O section %s,%s", name[0], name[1])
@@ -84,7 +82,7 @@ func readMachO(r io.ReaderAt, fileSize uint64) ([]Section, error) {
 	return sections, nil
 }
 
-func readSegment(r io.ReaderAt, position, commandSize, fileSize uint64, selected map[[2]string]Section) error {
+func readSegment(r io.ReaderAt, position, commandSize, fileSize uint64, profile layoutProfile, selected map[[2]string]Section) error {
 	if commandSize < 72 {
 		return fmt.Errorf("truncated LC_SEGMENT_64")
 	}
@@ -111,7 +109,7 @@ func readSegment(r io.ReaderAt, position, commandSize, fileSize uint64, selected
 		sectionName, segmentName := machoName(raw[:16]), machoName(raw[16:32])
 		key := [2]string{segmentName, sectionName}
 		wanted := false
-		for _, candidate := range layoutNames {
+		for _, candidate := range profile.sectionNames {
 			wanted = wanted || key == candidate
 		}
 		if !wanted {

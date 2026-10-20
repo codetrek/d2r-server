@@ -5,11 +5,14 @@ export GOCACHE := $(CURDIR)/.tmp/go/cache
 export GOMODCACHE := $(CURDIR)/.tmp/go/mod
 export GOTMPDIR := $(CURDIR)/.tmp/go/tmp
 export TMPDIR := $(CURDIR)/.tmp/go/tmp
+export UV_CACHE_DIR := $(CURDIR)/.tmp/uv
+export UV_PROJECT_ENVIRONMENT := $(CURDIR)/.tmp/venv-mac-fixture
+export UV_PYTHON_INSTALL_DIR := $(CURDIR)/.tmp/python
 
 GO_COV_VERSION := v0.1.4-0.20260617124522-d6caf2759e33
 IMAGE ?= d2r-server:dev
 
-.PHONY: prepare fmt-check vet test test-commands coverage check build cross-build docker-test docker-build
+.PHONY: prepare fmt-check vet test test-commands coverage check build cross-build docker-test docker-build fixture-test
 
 prepare:
 	@mkdir -p .tmp/go/cache .tmp/go/mod .tmp/go/tmp bin
@@ -47,3 +50,6 @@ docker-test:
 
 docker-build:
 	docker build -t $(IMAGE) .
+
+fixture-test: prepare
+	uv run --locked --python 3.12 --project tools/mac-fixture python -m unittest discover -s tools/mac-fixture/tests
