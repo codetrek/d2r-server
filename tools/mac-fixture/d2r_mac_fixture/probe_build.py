@@ -196,7 +196,7 @@ def verify_symbols(main_object: str, final_binary: str, required: list[str]) -> 
 def validate_native_profile(profile: dict) -> None:
     if (profile["schema_version"] != 1 or profile["upstream_revision"] != UPSTREAM_REVISION
             or profile["platform"] != "darwin" or profile["architecture"] != "arm64"
-            or profile["pointer_bytes"] != 8 or profile["trace_format_version"] != 1
+            or profile["pointer_bytes"] != 8 or profile["trace_format_version"] != 2
             or profile["main_translation_unit_define"] != MAIN_RENAME.removeprefix("-D")
             or profile["wrapper_symbol"] != "d2r_observed_run_module_inits"
             or profile["original_init_symbol"] != "run_module_inits"
@@ -204,7 +204,8 @@ def validate_native_profile(profile: dict) -> None:
             or profile["build_sources"] != ["integration.c", "profile.c", "observer.c", "shims.S"]
             or profile["build_headers"] != ["format.h", "abi.h", "probe.h", "internal.h"]
             or set(profile["required_symbols"]) != {"d2r_observed_run_module_inits", "run_module_inits",
-                "d2r_probe_server_send", "d2r_probe_client_send", "d2r_probe_system_pop", "d2r_probe_gameplay_pop"}
+                "d2r_probe_server_send", "d2r_probe_client_send", "d2r_probe_system_pop", "d2r_probe_gameplay_pop",
+                "d2r_probe_client_high_pop", "d2r_probe_client_low_pop"}
             or profile["required_environment"] != ["D2R_PROBE_MODULES", "D2R_TRANSPORT_TRACE", "D2R_PROBE_STOP_PATH"]):
         raise ValueError("native observer source profile differs from the supported build contract")
     for module, (size, digest) in MODULE_PROFILE.items():

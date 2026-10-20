@@ -2,7 +2,7 @@
 
 ## 工程状态
 
-本仓库维护服务端工具、Go 控制进程，以及后续 Linux 游戏宿主、网关、房间管理、持久化和部署代码。当前实现包括 `d2r-inspect` 双模块静态检查、`internal/guestingress` 内部入口编解码、`d2r-server` 控制进程与 `tools/mac-fixture` 私人候选/观察变体准备工具、原生观察器和 `d2r-trace`；游戏工作进程、联网游戏、SQLite 状态目录和存档恢复尚未实现。已有固定的 macOS ARM64 单机基线及独立观察变体进入世界并保存退出；后者在声明窗口内完成系统/玩法逐通道输入与出队对照；它不等于房间工作进程或联机。设计中的 G0–G5 均未通过。
+本仓库维护服务端工具、Go 控制进程，以及后续 Linux 游戏宿主、网关、房间管理、持久化和部署代码。当前实现包括 `d2r-inspect` 双模块静态检查、`internal/guestingress` 内部入口编解码、`d2r-server` 控制进程与 `tools/mac-fixture` 私人候选/观察变体准备工具、原生观察器和 `d2r-trace`；游戏工作进程、联网游戏、SQLite 状态目录和存档恢复尚未实现。已有固定的 macOS ARM64 单机基线及独立观察变体进入世界并保存退出；历史 v1 变体完成系统/玩法逐通道输入与出队对照；当前 v2 另有 205 tick 六处采样，34/571 条下行范围与客户端高/低队列逐条一致，首次断开原因仍未解决；它不等于房间工作进程或联机。设计中的 G0–G5 均未通过。
 
 普通源码检查不需要专有输入，使用合成 Mach-O/fixups 测试 main/sdk 布局解析、失败条件、来源摘要、输出发布和命令行行为。Python 准备工具测试同样只使用合成数据。内部入口测试使用合成载荷核对精确字节、声明长度、截断/尾随数据、整数范围及独立字节归属。控制进程测试核对健康、未就绪与能力声明。游戏实测必须另有私有验证记录，不能用 Go 测试或跨平台编译替代。
 
@@ -13,8 +13,8 @@
 | `cmd/d2r-inspect/` | 静态布局检查命令行入口。 |
 | `internal/guestlayout/` | 显式选择 main/sdk 的 Mach-O/fixups 校验、映像重建、schema 2 来源清单和新目录发布。 |
 | `internal/guestingress/` | 单条内部队列项和接收缓冲区的精确编解码与自有字节副本。 |
-| `internal/transporttrace/`、`cmd/d2r-trace/` | 固定私人采样格式的受界限读取、完整性判据及紧凑报告。 |
-| `native/transport-probe/` | 固定 Darwin ARM64 画像、ABI 垫片、原生记录与显式窗口结束屏障。 |
+| `internal/transporttrace/`、`cmd/d2r-trace/` | 固定私人 trace v2 的受界限读取、六类完整性判据及 JSON schema 2 报告。 |
+| `native/transport-probe/` | 固定 Darwin ARM64 六处画像、ABI 垫片、纯载荷客户端出队及显式窗口结束屏障。 |
 | `cmd/d2r-server/` | 控制服务入口与关闭生命周期。 |
 | `internal/control/` | 健康、就绪和能力查询 HTTP 处理及请求日志。 |
 | `tools/mac-fixture/` | uv 锁定的 Python 私人 Mac 基线与观察变体构建工具，均不执行游戏。 |
@@ -40,7 +40,7 @@ Linux 平台适配、服务端调度、网关和持久化归本仓库。[手机 
 - `research_artifacts` 固定自有输入及分析输出身份，只有元数据进入 Git。
 - `runtime_qualification.guest_execution: true` 只对应已实际执行的 `macos-arm64` / `full_client_singleplayer` 基线，固定候选清单、宿主、着色器链、159 tick 和正常保存退出记录。
 - `game_worker_qualified`、`linux_game_worker`、`multiplayer` 和 `two_process_transport` 保持 `false`，`gates_passed` 为空；检查器或准备工具成功不能修改这些运行结论。
-- `bounded_observer` 另行固定独立变体和 213 tick 窗口观察，不覆盖历史基线；完整性合格仅限该窗口，工作进程及 G0 资格仍为 false。
+- `bounded_observer` 保留历史 v1 的 213 tick 窗口；`bounded_client_observer` 另行固定 v2 的 205 tick 诊断窗口和初次断开未解决状态。两者不覆盖基线，也不证明观察稳定性、工作进程或 G0。
 - 锁文件是静态来源摘要，程序不读取它来决定可用能力。正常单机保存不证明崩溃或断电恢复。
 
 升级时先比较源码、补丁、映像布局及游戏构建，保留旧版本已验证的来源记录，再用新输入重新生成清单并完成受到影响的门槛验证。完整源码提交、Guest 与 fixups 哈希、资源与规则摘要及兼容性约定都要一起核对。只有获得新的验证记录后，才整体重写锁定文件及关联设计、研究和开发文档。当前不存在必须由代码兼容的旧服务端协议或持久化格式。
@@ -75,7 +75,7 @@ CI 设置 Linux 和 macOS 的 `check` / `cross-build` 通道、Linux/macOS 的 P
 
 2026-10-20 的基础设施基线已通过 `make check`、`make build`、Linux amd64/arm64 交叉构建，以及 Docker 中 Linux ARM64 的全包竞态测试和 `go vet`，当时核心包总覆盖率为 88.2%。对应最终镜像以默认非 root 身份启动，健康、未就绪及能力响应正确，正常停止状态码为 0；镜像内检查工具使用自有输入重建出历史一致映像，私人记录位于 `.tmp/container-validation/verification.json`。
 
-本次 main/sdk 与候选工具变更的完整 `make check` 通过，核心包总覆盖率 91.2%；逐包为 `transporttrace` 95.9%、`guestlayout` 86.3%、`guestingress` 90.6%、`control` 98.3%，`d2r-trace` 命令测试覆盖率为 92.0%。`make fixture-test` 的 23 项合成测试通过，真实自有输入的准备流程另有全部 15 阶段成功记录。独立审查指出的运行元数据检查与复制之间的身份问题已经修复并复核，无未解决 critical/major。各分支 Docker 和远程 CI 必须以该分支实际结果为准，配置和历史绿色结果不代表当前变更已通过。
+本次 main/sdk 与候选工具变更的完整 `make check` 通过，核心包总覆盖率 91.2%；逐包为 `transporttrace` 96.0%、`guestlayout` 86.3%、`guestingress` 90.6%、`control` 98.3%，`d2r-trace` 命令测试覆盖率为 92.0%。`make fixture-test` 的 23 项合成测试通过，真实自有输入的准备流程另有全部 15 阶段成功记录。独立审查指出的运行元数据检查与复制之间的身份问题已经修复并复核，无未解决 critical/major。各分支 Docker 和远程 CI 必须以该分支实际结果为准，配置和历史绿色结果不代表当前变更已通过。
 
 最终准备候选另行在受约束的 Mac 实验中运行，进入本地世界推进 159 tick，正常保存退出返回菜单；退出请求后记录 3 次保存提交，角色输出变化，原始备份保持不变，随后进程退出码 0。完整身份、输入保护和证据范围见 [Mac 运行报告](research/2026-10-20-mac-runtime-fixture.md)。这证明限定的 Mac 完整客户端单机路径；Linux 引擎、房间、双进程桥接、多人及故障持久化均未获资格。后续独立原生变体还完成 213 tick 实际移动，系统 62 条、玩法 26 条输入与各自有效出队逐条精确且顺序一致；原生测试、ASAN/UBSAN 及独立审查通过，记录见[原生观察报告](research/2026-10-20-native-transport-probe.md)。
 
@@ -109,9 +109,9 @@ TVFS 的 133,200 条路径不代表所有内容档案都存在；已验证的 3,
 
 运行显式提供 `D2R_PROBE_STOP_PATH`，在游戏与保存退出断言达到后创建所属标记；观察器关闭新准入并等待在途原方法和出队复制完成，发布 `CLOSED` 后控制方才结束宿主。区间外继续纯转发，不能依赖宿主 `_exit` 调用 atexit。文件完整性只覆盖声明窗口。
 
-`d2r-trace -input TRACEPATH [-report NEW_JSON]` 验证固定头、计数、记录、标志、模式与连接前缀，复用内部入口解码器；只读取提交前缀，分配受单条观察上限约束。JSON 为四类紧凑统计与摘要，不输出载荷、地址、玩家或无限记录表。报告文件排他创建为 0600；错误/缺口/未关闭或容量截断均不能通过，损坏和不合格退出 1。模式 1/3 错标客户端忽略的审查问题已有负例回归。
+`d2r-trace -input TRACEPATH [-report NEW_JSON]` 验证固定头、计数、记录、标志、模式与连接前缀，复用内部入口解码器；只读取提交前缀，分配受单条观察上限约束。当前仅支持 trace v2 / JSON schema 2，JSON 为六类紧凑统计与摘要，不输出载荷、地址、玩家或无限记录表。报告文件排他创建为 0600；错误/缺口/未关闭或容量截断均不能通过，损坏和不合格退出 1。模式 1/3 错标客户端忽略的审查问题已有负例回归。
 
-实际移动窗口的逐通道精确对照不证明跨通道全局顺序或 S2C 消费，也没有把方法尝试提升为投递。`capture_integrity_eligible` 不修改 G0 或生产引擎资格。原生格式和 ABI 以[格式文档](../native/transport-probe/format.md)为准。
+历史 v1 的精确对照不证明 S2C 消费；当前 v2 增加客户端 `+0/+8` 高/低队列出队，返回范围没有 CID，不能交给服务端接收表示解码器。605 条实际下行范围在各自分桶内逐条字节有序相等，客户端出队仍不等于状态应用或跨队列全局顺序。初次断开和后续两项转调对照、成功诊断的完整范围见[客户端出队报告](research/2026-10-21-s2c-client-consumption.md)。`capture_integrity_eligible` 不修改 G0 或生产引擎资格。原生格式和 ABI 以[格式文档](../native/transport-probe/format.md)为准。
 
 ## 输出目录的原子发布
 

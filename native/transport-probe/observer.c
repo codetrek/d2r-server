@@ -18,7 +18,7 @@ typedef struct {
     size_t capacity;
     int fd;
     uint8_t *server, *client;
-    uintptr_t targets[4];
+    uintptr_t targets[D2R_TRACE_KIND_COUNT];
     d2r_probe_frame_fn frame;
     unsigned phase;
     uint64_t inflight;
@@ -138,7 +138,8 @@ void d2r_probe_before(d2r_probe_abi *s) {
     if (kind <= D2R_TRACE_CLIENT_SEND_ATTEMPT) increment(&context.header->attempts);
     else increment(&context.header->pops);
     if (!enter_observation()) { errno = saved_errno; return; }
-    uint8_t *expected = kind == D2R_TRACE_CLIENT_SEND_ATTEMPT ? context.client : context.server;
+    uint8_t *expected = kind == D2R_TRACE_CLIENT_SEND_ATTEMPT || kind >= D2R_TRACE_CLIENT_HIGH_POSTPOP
+        ? context.client : context.server;
     if ((uintptr_t)expected != s->x[0]) {
         failure(); record(kind, D2R_RECORD_BAD_SPAN, 0, 0, NULL, 0, 0);
     } else if (kind == D2R_TRACE_SERVER_SEND_ATTEMPT) {
@@ -191,7 +192,7 @@ void d2r_probe_after(d2r_probe_abi *s) {
 }
 
 int d2r_probe_trace_start(const char *path, size_t capacity, void *server, void *client,
-                          const uintptr_t targets[4], d2r_probe_frame_fn frame) {
+                          const uintptr_t targets[D2R_TRACE_KIND_COUNT], d2r_probe_frame_fn frame) {
     if (context.header || !path || !*path || capacity < D2R_TRACE_HEADER_SIZE ||
         capacity > D2R_TRACE_CAPACITY || !frame) { errno = EINVAL; return -1; }
     int fd = open(path, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
@@ -287,7 +288,7 @@ int d2r_probe_start_control(const char *path) {
 }
 #ifdef D2R_PROBE_TESTING
 int d2r_probe_test_start(const char *path, size_t capacity, void *server, void *client,
-                        const uintptr_t targets[4], d2r_probe_frame_fn frame) {
+                        const uintptr_t targets[D2R_TRACE_KIND_COUNT], d2r_probe_frame_fn frame) {
     return d2r_probe_trace_start(path, capacity, server, client, targets, frame);
 }
 int d2r_probe_test_control(const char *path) {

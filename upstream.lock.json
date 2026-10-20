@@ -116,6 +116,41 @@
       "reference": "docs/research/2026-10-20-native-transport-probe.md",
       "qualifies_game_worker": false,
       "qualifies_g0": false
+    },
+    "bounded_client_observer": {
+      "scope": "darwin-arm64 full_client_singleplayer one successful explicitly_closed diagnostic window; initial disconnect unresolved",
+      "profile": "d2r-mobile-120fe55-darwin-arm64-transport-v2",
+      "variant_manifest_sha256": "e5dccc06d7c1c9a0e6ab3860d6c37eb9e421fb8c9562b4bfa2d9ab3bc5f5bf96",
+      "variant_host_sha256": "9879e8a61ebdbffd4358d55fb03da6b0c44137fcae745ddc7e5439a7b7f52636",
+      "parent_fixture_manifest_sha256": "0b6b9461317d68d539ee2eb96cddb369518d89edf9ff0bfdebf43a2c4e0d73a8",
+      "trace_sha256": "370ec82c37d8c65dc9c8e3f6937add6aac259adf5cc268152e9d77426e8909e2",
+      "capture_integrity_eligible": true,
+      "capture_window_closed": true,
+      "observed": {
+        "world_max_tick": 205,
+        "records": 2378,
+        "send_attempts": 693,
+        "pop_calls": 1685,
+        "empty_pops": 992,
+        "server_send_attempts": 605,
+        "client_high_valid_pops": 34,
+        "client_low_valid_pops": 571,
+        "s2c_copied_bytes": 19041,
+        "errors": 0,
+        "overflow": 0,
+        "thread_violations": 0,
+        "per_bucket_every_observed_range_exact_and_ordered": true,
+        "cross_channel_global_order_claimed": false,
+        "returned_to_menu": true,
+        "save_commits_after_exit_request": 3,
+        "original_input_backup_unchanged": true,
+        "process_exit_code": 0
+      },
+      "initial_disconnect_cause_resolved": false,
+      "observational_stability_qualified": false,
+      "qualifies_game_worker": false,
+      "qualifies_g0": false,
+      "reference": "docs/research/2026-10-21-s2c-client-consumption.md"
     }
   }
 }

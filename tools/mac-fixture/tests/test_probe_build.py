@@ -17,13 +17,14 @@ from d2r_mac_fixture.process import sha256
 
 
 REQUIRED = ["d2r_observed_run_module_inits", "run_module_inits", "d2r_probe_server_send",
-            "d2r_probe_client_send", "d2r_probe_system_pop", "d2r_probe_gameplay_pop"]
+            "d2r_probe_client_send", "d2r_probe_system_pop", "d2r_probe_gameplay_pop",
+            "d2r_probe_client_high_pop", "d2r_probe_client_low_pop"]
 
 
 def native_profile():
     return {"schema_version": 1, "upstream_revision": UPSTREAM_REVISION,
             "platform": "darwin", "architecture": "arm64", "pointer_bytes": 8,
-            "trace_format_version": 1,
+            "trace_format_version": 2,
             "main_translation_unit_define": "run_module_inits=d2r_observed_run_module_inits",
             "wrapper_symbol": "d2r_observed_run_module_inits", "original_init_symbol": "run_module_inits",
             "integration_source": "integration.c", "build_sources": ["integration.c", "profile.c", "observer.c", "shims.S"],
@@ -53,7 +54,7 @@ class ProbeBuildTest(unittest.TestCase):
         main = "                 U _d2r_observed_run_module_inits\n"
         binary = "\n".join(f"00001234 T _{name}" for name in REQUIRED)
         result = verify_symbols(main, binary, REQUIRED)
-        self.assertEqual(len(result["final_single_definitions"]), 6)
+        self.assertEqual(set(result["final_single_definitions"]), {"_" + name for name in REQUIRED})
         for altered_main, altered_binary in (
                 (main + " U _run_module_inits\n", binary),
                 (main, binary + "\n00005678 T _run_module_inits"),
@@ -89,6 +90,8 @@ class ProbeBuildTest(unittest.TestCase):
         profile = native_profile()
         validate_native_profile(profile)
         for change in (lambda value: value.update(architecture="x86_64"),
+                       lambda value: value.update(trace_format_version=1),
+                       lambda value: value["required_symbols"].remove("d2r_probe_client_high_pop"),
                        lambda value: value["modules"]["sdk"].update(sha256="0" * 64),
                        lambda value: value["build_sources"].append("other.c"),
                        lambda value: value["required_environment"].remove("D2R_PROBE_STOP_PATH")):

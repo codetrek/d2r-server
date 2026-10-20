@@ -15,15 +15,19 @@ static const uintptr_t secondary_slots[16] = {0x83fd90, 0x83fe04, 0x84b378, 0x84
 
 static uintptr_t server_clone[16], client_clone[28];
 
-static void prepare_clones(const uintptr_t *server, const uintptr_t *client, uintptr_t targets[4]) {
+static void prepare_clones(const uintptr_t *server, const uintptr_t *client,
+                            uintptr_t targets[D2R_TRACE_KIND_COUNT]) {
     memcpy(server_clone, server, sizeof server_clone);
     memcpy(client_clone, client, sizeof client_clone);
     targets[0] = server_clone[2 + 5]; targets[1] = client_clone[2 + 6];
     targets[2] = server_clone[2 + 10]; targets[3] = server_clone[2 + 11];
+    targets[4] = client_clone[2]; targets[5] = client_clone[2 + 1];
     server_clone[2 + 5] = (uintptr_t)d2r_probe_server_send;
     client_clone[2 + 6] = (uintptr_t)d2r_probe_client_send;
     server_clone[2 + 10] = (uintptr_t)d2r_probe_system_pop;
     server_clone[2 + 11] = (uintptr_t)d2r_probe_gameplay_pop;
+    client_clone[2] = (uintptr_t)d2r_probe_client_high_pop;
+    client_clone[2 + 1] = (uintptr_t)d2r_probe_client_low_pop;
 }
 
 static int digest_matches(int directory, const char *name, size_t expected_size,
@@ -101,7 +105,7 @@ int d2r_probe_install(const d2r_probe_module *modules, size_t count,
     /* Address points have negative Itanium headers. Preserve the complete known
      * tables and leave the secondary subobject's original vptr untouched.
      * https://github.com/itanium-cxx-abi/cxx-abi/blob/fae5e46c86147a457a057c6372fa95ec38209fe8/abi.html#L1284 */
-    uintptr_t targets[4];
+    uintptr_t targets[D2R_TRACE_KIND_COUNT];
     prepare_clones((uintptr_t *)(base + D2R_SERVER_TABLE - 16),
                    (uintptr_t *)(base + D2R_CLIENT_TABLE - 16), targets);
     if (d2r_probe_trace_start(trace_path, D2R_TRACE_CAPACITY, base + D2R_SERVER_OFFSET,
@@ -126,7 +130,7 @@ int d2r_probe_test_digest(const char *directory, const char *name, size_t size,
 }
 void d2r_probe_test_clones(const uintptr_t server[16], const uintptr_t client[28],
                            uintptr_t server_result[16], uintptr_t client_result[28]) {
-    uintptr_t targets[4]; prepare_clones(server, client, targets);
+    uintptr_t targets[D2R_TRACE_KIND_COUNT]; prepare_clones(server, client, targets);
     memcpy(server_result, server_clone, sizeof server_clone);
     memcpy(client_result, client_clone, sizeof client_clone);
 }

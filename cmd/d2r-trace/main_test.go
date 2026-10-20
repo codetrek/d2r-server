@@ -23,8 +23,8 @@ func traceFile(t *testing.T, closed bool) string {
 		t.Fatal(err)
 	}
 	b := make([]byte, 256)
-	copy(b, "D2RTP001")
-	binary.LittleEndian.PutUint32(b[8:], 1)
+	copy(b, "D2RTP002")
+	binary.LittleEndian.PutUint32(b[8:], 2)
 	binary.LittleEndian.PutUint32(b[12:], 256)
 	binary.LittleEndian.PutUint64(b[16:], transporttrace.Capacity)
 	binary.LittleEndian.PutUint64(b[24:], 256)
@@ -61,7 +61,7 @@ func TestStdoutAndPrivateReport(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &r); err != nil {
 		t.Fatal(err)
 	}
-	if !r.CaptureIntegrityEligible || r.G0Qualified || r.GameWorkerQualified || len(r.Kinds) != 4 {
+	if !r.CaptureIntegrityEligible || r.G0Qualified || r.GameWorkerQualified || len(r.Kinds) != 6 {
 		t.Fatalf("wrong qualification %+v", r)
 	}
 	if strings.Contains(stdout.String(), input) || strings.Contains(stdout.String(), "owner_thread") {

@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "name": "d2r-mobile-120fe55-darwin-arm64-transport-v1",
+  "name": "d2r-mobile-120fe55-darwin-arm64-transport-v2",
   "upstream_revision": "120fe55c02a5633476998a44f8c3c3c809fa48b0",
   "platform": "darwin",
   "architecture": "arm64",
   "pointer_bytes": 8,
-  "trace_format_version": 1,
+  "trace_format_version": 2,
   "modules": {
     "main": {
       "filename": "main.patched.bin",
@@ -40,7 +40,9 @@
     "d2r_probe_server_send",
     "d2r_probe_client_send",
     "d2r_probe_system_pop",
-    "d2r_probe_gameplay_pop"
+    "d2r_probe_gameplay_pop",
+    "d2r_probe_client_high_pop",
+    "d2r_probe_client_low_pop"
   ],
   "required_environment": [
     "D2R_PROBE_MODULES",

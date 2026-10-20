@@ -2,6 +2,8 @@
 
 日期：2026-10-20。范围：固定 Darwin ARM64 完整客户端、本地单机、显式关闭的采样窗口。**G0–G5 均未通过；Linux、双进程与多人未获资格。**
 
+本文固定提交 `58a8cc0` 的历史 trace v1 / 四处观察语义与回执；当前源码和格式已升级为 v2 / 六处，见[客户端出队报告](2026-10-21-s2c-client-consumption.md)。下列方法数量、示例读取器和摘要均指历史实现，不能用当前读取器解释旧文件。
+
 本报告承接 [Mac 单机基线](2026-10-20-mac-runtime-fixture.md)及 [G0 静态边界](2026-10-20-g0-transport-boundaries.md)。本轮新增原生观察器、观察变体构建入口、Go 读取器和 CLI，并对最终变体完成实际移动及保存退出实验。它记录本地调用，不是网络协议实现；生产控制进程仍返回未就绪 503、引擎不可用和联机不可用。
 
 ## 构建与 ABI 边界
@@ -33,8 +35,9 @@
 
 `internal/transporttrace.Read(io.ReaderAt, size)`验证固定画像、版本、容量、已提交边界、计数、种类、标志、保留字节、对齐、连续序号及归属线程。只为有效出队调用 `guestingress.DecodeReceiverBuffer` 并核对前缀和连接元数据；没有逐记录无限列表或按文件容量分配内存。
 
+以下示例使用该历史提交构建的 v1 读取器；当前构建只读取 v2。
+
 ```sh
-make build
 ./bin/d2r-trace -input .tmp/owned-run/transport.trace
 ./bin/d2r-trace -input .tmp/owned-run/transport.trace -report .tmp/owned-run/new-report.json
 ```
