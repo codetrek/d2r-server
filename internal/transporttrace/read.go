@@ -16,7 +16,7 @@ const (
 	RecordHeaderSize    = 64
 	Capacity            = 64 * 1024 * 1024
 	ObservationCap      = 1024 * 1024
-	ProfileName         = "d2r-mobile-120fe55-darwin-arm64-transport-v1"
+	ProfileName         = "d2r-mobile-120fe55-darwin-arm64-transport-v2"
 	mainSHA256          = "30384eabe394cbc6b6a0b7f3788983d58dc14a92b7abe1638853dc4833cf81f1"
 	sdkSHA256           = "d48f2cc33f3e506d623f873ba447c88fe0aea989b98c4057e2481b6ca3988fa2"
 	installed           = 1
@@ -32,6 +32,8 @@ const (
 	recordGapFlag       = 64
 	clientIDFlag        = 128
 )
+
+var kindNames = [...]string{"server_send_attempt", "client_send_attempt", "system_postpop", "gameplay_postpop", "client_high_postpop", "client_low_postpop"}
 
 type Counters struct {
 	Records          uint64 `json:"records"`
@@ -108,10 +110,10 @@ func Read(input io.ReaderAt, size int64) (*Report, error) {
 		return nil, err
 	}
 	r := &Report{
-		SchemaVersion:         1,
+		SchemaVersion:         2,
 		Scope:                 "private fixed-profile Darwin ARM64 local observer; bounded declared capture window only; no network or game qualification",
 		InputAssumption:       "owning process finished or explicitly closed capture window with externally verified stable snapshot",
-		PayloadDigestEncoding: "SHA-256 of concatenated copied bytes per kind in sequence order; postpop guest digest excludes each connection prefix; attempts are not delivery",
+		PayloadDigestEncoding: "SHA-256 of concatenated copied bytes per kind in sequence order; only server postpop guest digest excludes CID4; client postpop copied digest is payload-only; attempts are not delivery and client dequeue is not gameplay dispatch",
 		Profile:               ProfileName,
 		MainSHA256:            mainSHA256,
 		SDKSHA256:             sdkSHA256,
@@ -124,10 +126,10 @@ func Read(input io.ReaderAt, size int64) (*Report, error) {
 		NormalClose:           h.flags&closed != 0,
 		CommittedPrefixValid:  true,
 		Problems:              []string{},
-		Kinds:                 make([]KindSummary, 4),
+		Kinds:                 make([]KindSummary, len(kindNames)),
 	}
-	kinds := [4]summary{}
-	for i, name := range []string{"server_send_attempt", "client_send_attempt", "system_postpop", "gameplay_postpop"} {
+	kinds := [len(kindNames)]summary{}
+	for i, name := range kindNames {
 		kinds[i] = summary{value: KindSummary{Kind: name}, copied: sha256.New(), guest: sha256.New()}
 	}
 	var attempts, pops, empty, errorRecords uint64
@@ -210,7 +212,7 @@ func Read(input io.ReaderAt, size int64) (*Report, error) {
 	for i := range kinds {
 		k := &kinds[i]
 		k.value.CopiedPayloadSHA256 = hex.EncodeToString(k.copied.Sum(nil))
-		if i >= 2 {
+		if i >= 2 && i <= 3 {
 			k.value.GuestPayloadSHA256 = hex.EncodeToString(k.guest.Sum(nil))
 		}
 		r.Kinds[i] = k.value
@@ -222,10 +224,10 @@ func Read(input io.ReaderAt, size int64) (*Report, error) {
 func decodeHeader(b []byte, size int64) (header, error) {
 	u64 := func(at int) uint64 { return binary.LittleEndian.Uint64(b[at:]) }
 	h := header{capacity: u64(16), committed: u64(24), flags: u64(88), owner: u64(96), observationCap: u64(104), counts: Counters{Records: u64(32), SendAttempts: u64(40), PopCalls: u64(48), EmptyPops: u64(56), Errors: u64(64), Overflow: u64(72), ThreadViolations: u64(80)}}
-	if string(b[:8]) != "D2RTP001" {
+	if string(b[:8]) != "D2RTP002" {
 		return h, fmt.Errorf("unsupported trace magic")
 	}
-	if binary.LittleEndian.Uint32(b[8:]) != 1 || binary.LittleEndian.Uint32(b[12:]) != HeaderSize {
+	if binary.LittleEndian.Uint32(b[8:]) != 2 || binary.LittleEndian.Uint32(b[12:]) != HeaderSize {
 		return h, fmt.Errorf("unsupported trace version or header size")
 	}
 	if h.capacity != Capacity {

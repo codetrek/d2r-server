@@ -21,8 +21,8 @@ type fixtureRecord struct {
 
 func fixture(records ...fixtureRecord) []byte {
 	b := make([]byte, HeaderSize)
-	copy(b, "D2RTP001")
-	binary.LittleEndian.PutUint32(b[8:], 1)
+	copy(b, "D2RTP002")
+	binary.LittleEndian.PutUint32(b[8:], 2)
 	binary.LittleEndian.PutUint32(b[12:], HeaderSize)
 	binary.LittleEndian.PutUint64(b[16:], Capacity)
 	binary.LittleEndian.PutUint64(b[88:], installed|profileMatched|closed)
@@ -87,7 +87,7 @@ func TestGoldenSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !r.CaptureIntegrityEligible || !r.CommittedPrefixValid || r.G0Qualified || r.GameWorkerQualified || r.ParsedRecords != 5 || len(r.Kinds) != 4 {
+	if !r.CaptureIntegrityEligible || !r.CommittedPrefixValid || r.G0Qualified || r.GameWorkerQualified || r.ParsedRecords != 5 || len(r.Kinds) != 6 || r.SchemaVersion != 2 {
 		t.Fatalf("unexpected report %+v", r)
 	}
 	if r.Kinds[0].PayloadRecords != 1 || r.Kinds[1].Ignored != 1 || r.Kinds[2].CopiedBytes != 6 || r.Kinds[3].Empty != 1 || r.Kinds[3].PayloadRecords != 1 {
@@ -102,10 +102,38 @@ func TestGoldenSummary(t *testing.T) {
 	}
 }
 
+func TestClientPostpopsKeepPayloadOnlyBytes(t *testing.T) {
+	for _, kind := range []uint16{5, 6} {
+		for _, payload := range [][]byte{{0xaf}, {0x12, 0x34, 0x56}, {0, 0, 0, 0, 0x42}, {}} {
+			b := fixture(fixtureRecord{kind: kind, flags: payloadFlag, payload: payload, original: uint64(len(payload))}, fixtureRecord{kind: kind, flags: emptyFlag})
+			r, err := Read(bytes.NewReader(b), Capacity)
+			if err != nil {
+				t.Fatal(err)
+			}
+			k := r.Kinds[kind-1]
+			want := sha256.Sum256(payload)
+			if !r.CaptureIntegrityEligible || k.PayloadRecords != 1 || k.Empty != 1 || k.CopiedBytes != uint64(len(payload)) || k.CopiedPayloadSHA256 != hex.EncodeToString(want[:]) || k.GuestPayloadSHA256 != "" {
+				t.Fatalf("client range was interpreted as a server receiver: %+v", k)
+			}
+		}
+		for _, rec := range []fixtureRecord{
+			{kind: kind, flags: payloadFlag | clientIDFlag, payload: []byte{0, 0, 0, 0, 0x42}, original: 5},
+			{kind: kind, flags: badSpanFlag | clientIDFlag},
+			{kind: kind, flags: emptyFlag | clientIDFlag},
+			{kind: kind, flags: ignoredFlag},
+			{kind: kind, flags: payloadFlag, mode: 1},
+		} {
+			if _, err := Read(bytes.NewReader(fixture(rec)), Capacity); err == nil {
+				t.Fatalf("accepted invalid client postpop metadata: %+v", rec)
+			}
+		}
+	}
+}
+
 func TestHeaderCorruption(t *testing.T) {
 	cases := map[string]func([]byte){
 		"magic":                     func(b []byte) { b[0] = 'X' },
-		"version":                   func(b []byte) { binary.LittleEndian.PutUint32(b[8:], 2) },
+		"version":                   func(b []byte) { binary.LittleEndian.PutUint32(b[8:], 1) },
 		"header size":               func(b []byte) { binary.LittleEndian.PutUint32(b[12:], 248) },
 		"capacity":                  func(b []byte) { binary.LittleEndian.PutUint64(b[16:], Capacity-8) },
 		"committed before header":   func(b []byte) { binary.LittleEndian.PutUint64(b[24:], 248) },
@@ -143,7 +171,7 @@ func TestHeaderCorruption(t *testing.T) {
 func TestRecordCorruption(t *testing.T) {
 	cases := map[string]func([]byte){
 		"size":                 func(b []byte) { binary.LittleEndian.PutUint32(b[256:], 64) },
-		"kind":                 func(b []byte) { binary.LittleEndian.PutUint16(b[260:], 5) },
+		"kind":                 func(b []byte) { binary.LittleEndian.PutUint16(b[260:], 7) },
 		"unknown flag":         func(b []byte) { binary.LittleEndian.PutUint16(b[262:], 256) },
 		"sequence":             func(b []byte) { binary.LittleEndian.PutUint64(b[264:], 2) },
 		"thread":               func(b []byte) { binary.LittleEndian.PutUint64(b[280:], 43) },

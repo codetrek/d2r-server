@@ -20,7 +20,7 @@ func decodeRecord(b []byte, h header, sequence, offset uint64) (record, error) {
 	bad := func(reason string) (record, error) {
 		return r, fmt.Errorf("record %d at %d: %s", sequence, offset, reason)
 	}
-	if r.kind < 1 || r.kind > 4 {
+	if r.kind < 1 || int(r.kind) > len(kindNames) {
 		return bad("unknown kind")
 	}
 	if r.sequence != sequence {
@@ -52,8 +52,11 @@ func decodeRecord(b []byte, h header, sequence, offset uint64) (record, error) {
 		if r.flags & ^uint16(payloadFlag|clientIDFlag) != 0 || r.original != uint64(r.length) {
 			return bad("inconsistent copied payload flags or original length")
 		}
-		if r.kind >= 3 && (r.length < 4 || r.flags&clientIDFlag == 0) {
-			return bad("postpop payload lacks connection prefix")
+		if r.kind >= 3 && r.kind <= 4 && (r.length < 4 || r.flags&clientIDFlag == 0) {
+			return bad("server postpop payload lacks connection prefix")
+		}
+		if r.kind >= 5 && r.flags&clientIDFlag != 0 {
+			return bad("client postpop payload has unsupported connection metadata")
 		}
 		if r.kind == 1 && (r.flags&clientIDFlag == 0 || r.clientID != 0 || r.mode != 1) {
 			return bad("server send payload contradicts fixed local guards")
@@ -91,8 +94,8 @@ func decodeRecord(b []byte, h header, sequence, offset uint64) (record, error) {
 	if r.flags&capExceededFlag != 0 && r.original <= h.observationCap {
 		return bad("cap-exceeded record has no oversized original length")
 	}
-	if r.kind == 2 && r.flags&clientIDFlag != 0 {
-		return bad("client send error has unsupported connection metadata")
+	if (r.kind == 2 || r.kind >= 5) && r.flags&clientIDFlag != 0 {
+		return bad("client observation error has unsupported connection metadata")
 	}
 	return r, nil
 }
@@ -118,7 +121,7 @@ func observe(k *summary, r record, payload []byte) error {
 	k.value.PayloadRecords++
 	k.value.CopiedBytes += uint64(len(payload))
 	_, _ = k.copied.Write(payload)
-	if r.kind >= 3 {
+	if r.kind >= 3 && r.kind <= 4 {
 		message, err := guestingress.DecodeReceiverBuffer(payload, uint32(len(payload)-4))
 		if err != nil {
 			return fmt.Errorf("record %d receiver buffer: %w", r.sequence, err)

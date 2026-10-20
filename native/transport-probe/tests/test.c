@@ -41,8 +41,8 @@ static void start(size_t capacity) {
     d2r_test_calls = 0; d2r_test_mode = 0;
     frame_owner = pthread_self();
     snprintf(path, sizeof path, "%s/case-%u.trace", directory, test_number++);
-    uintptr_t targets[4] = {(uintptr_t)d2r_test_original, (uintptr_t)d2r_test_original,
-                            (uintptr_t)d2r_test_original, (uintptr_t)d2r_test_original};
+    uintptr_t targets[D2R_TRACE_KIND_COUNT];
+    for (unsigned i = 0; i < D2R_TRACE_KIND_COUNT; i++) targets[i] = (uintptr_t)d2r_test_original;
     assert(!d2r_probe_test_start(path, capacity, server, client, targets, frame));
 }
 static d2r_probe_abi input(unsigned kind, uintptr_t descriptor) {
@@ -50,7 +50,7 @@ static d2r_probe_abi input(unsigned kind, uintptr_t descriptor) {
     for (unsigned i = 0; i < 9; i++) value.x[i] = 0x10000 + i;
     for (unsigned q = 0; q < 8; q++) memset(value.q[q], 0x30 + q, 16);
     value.nzcv = 0x60000000;
-    value.x[0] = (uintptr_t)(kind == 2 ? client : server);
+    value.x[0] = (uintptr_t)(kind == 2 || kind >= 5 ? client : server);
     if (kind == 1) { value.x[1] = 0; value.x[2] = descriptor; }
     if (kind == 2) value.x[1] = descriptor;
     if (kind >= 3) value.x[8] = descriptor;
@@ -58,7 +58,8 @@ static d2r_probe_abi input(unsigned kind, uintptr_t descriptor) {
 }
 static void invoke(unsigned kind, uintptr_t descriptor) {
     void (*shims[])(void) = {d2r_probe_server_send, d2r_probe_client_send,
-                             d2r_probe_system_pop, d2r_probe_gameplay_pop};
+                             d2r_probe_system_pop, d2r_probe_gameplay_pop,
+                             d2r_probe_client_high_pop, d2r_probe_client_low_pop};
     d2r_probe_abi value = input(kind, descriptor), expected = value;
     uint64_t before = d2r_test_calls;
     errno = EDOM;
@@ -81,7 +82,7 @@ static uint8_t *finish(d2r_trace_header *header) {
     memcpy(header, data, sizeof *header);
     d2r_probe_test_reset();
     assert(!memcmp(header->magic, D2R_TRACE_MAGIC, 8));
-    assert(header->version == 1 && header->header_size == 256 && header->capacity == (uint64_t)info.st_size);
+    assert(header->version == 2 && header->header_size == 256 && header->capacity == (uint64_t)info.st_size);
     assert(header->flags & D2R_TRACE_CLOSED);
     assert(header->owner_thread != 0);
     return data;
@@ -128,11 +129,14 @@ static void ignored_and_gaps(void) {
     }
 }
 static void pops(void) {
-    for (unsigned kind = 3; kind <= 4; kind++) {
+    for (unsigned kind = 3; kind <= D2R_TRACE_KIND_COUNT; kind++) {
         start(4096);
         uint8_t payload[] = {0x12, 0x34, 0x56, 0x78, 0x67, 0xa5};
+        if (kind == 5) payload[0] = 0xaf;
         uint8_t output[24]; memset(output, 0xcc, sizeof output);
-        d2r_test_span[0] = (uintptr_t)payload; d2r_test_span[1] = (uintptr_t)payload + sizeof payload;
+        size_t length = kind <= 4 ? sizeof payload : kind == 5 ? 1 : 3;
+        uint8_t expected[sizeof payload]; memcpy(expected, payload, sizeof payload);
+        d2r_test_span[0] = (uintptr_t)payload; d2r_test_span[1] = (uintptr_t)payload + length;
         d2r_test_mode = 1;
         invoke(kind, (uintptr_t)output);
         assert(output[16] == 1 && output[17] == 0xcc);
@@ -140,22 +144,24 @@ static void pops(void) {
         d2r_trace_header h; uint8_t *data = finish(&h);
         d2r_trace_record *r = (void *)(data + 256);
         assert(h.pops == 1 && !h.empty_pops && !h.errors && h.attempts == 0);
-        assert(r->kind == kind && r->flags == (D2R_RECORD_PAYLOAD | D2R_RECORD_CLIENT_ID));
-        assert(r->client_id == 0x78563412 && r->payload_length == 6);
-        assert(!memcmp(data + 320, (uint8_t[]){0x12, 0x34, 0x56, 0x78, 0x67, 0xa5}, 6));
+        assert(r->kind == kind && r->flags == (D2R_RECORD_PAYLOAD | (kind <= 4 ? D2R_RECORD_CLIENT_ID : 0)));
+        assert(r->client_id == (kind <= 4 ? 0x78563412u : 0u) && r->payload_length == length);
+        assert(!memcmp(data + 320, expected, length));
         free(data);
     }
-    start(4096);
     size_t page = (size_t)sysconf(_SC_PAGESIZE);
     uint8_t *guard = mmap(NULL, page * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     assert(guard != MAP_FAILED && !mprotect(guard, page, PROT_NONE));
-    d2r_test_mode = 2;
-    invoke(3, (uintptr_t)(guard + page - 16));
-    d2r_trace_header h; uint8_t *data = finish(&h);
-    d2r_trace_record *r = (void *)(data + 256);
-    assert(h.empty_pops == 1 && !h.errors && r->flags == D2R_RECORD_EMPTY);
-    assert(!r->payload_length && !r->original_length);
-    assert(!munmap(guard, page * 2)); free(data);
+    for (unsigned kind = 3; kind <= D2R_TRACE_KIND_COUNT; kind++) {
+        start(4096); d2r_test_mode = 2;
+        invoke(kind, (uintptr_t)(guard + page - 16));
+        d2r_trace_header h; uint8_t *data = finish(&h);
+        d2r_trace_record *r = (void *)(data + 256);
+        assert(h.empty_pops == 1 && !h.errors && r->flags == D2R_RECORD_EMPTY);
+        assert(!r->payload_length && !r->original_length);
+        free(data);
+    }
+    assert(!munmap(guard, page * 2));
 }
 static void bad_spans(void) {
     for (unsigned scenario = 0; scenario < 5; scenario++) {
@@ -222,7 +228,13 @@ static void hashes_and_tables(void) {
         if (i == 13) expected = (uintptr_t)d2r_probe_gameplay_pop;
         assert(server_result[i] == expected);
     }
-    for (unsigned i = 0; i < 28; i++) assert(client_result[i] == (i == 8 ? (uintptr_t)d2r_probe_client_send : client_source[i]));
+    for (unsigned i = 0; i < 28; i++) {
+        uintptr_t expected = client_source[i];
+        if (i == 2) expected = (uintptr_t)d2r_probe_client_high_pop;
+        if (i == 3) expected = (uintptr_t)d2r_probe_client_low_pop;
+        if (i == 8) expected = (uintptr_t)d2r_probe_client_send;
+        assert(client_result[i] == expected);
+    }
 }
 static void public_capacity_fixture(void) {
     start(D2R_TRACE_CAPACITY);
@@ -265,7 +277,7 @@ static void *request_stop(void *unused) {
     pthread_cond_broadcast(&block_changed); pthread_mutex_unlock(&block_lock);
     return NULL;
 }
-static void explicit_barrier(void) {
+static void explicit_barrier(unsigned kind) {
     start(4096); block_entered = block_release = 0;
     snprintf(stop_path, sizeof stop_path, "%s/stop-%u", directory, test_number);
     assert(!d2r_probe_test_control(stop_path));
@@ -273,7 +285,7 @@ static void explicit_barrier(void) {
     d2r_test_span[0] = (uintptr_t)payload; d2r_test_span[1] = (uintptr_t)payload + sizeof payload;
     d2r_test_mode = 3;
     pthread_t stopper; assert(!pthread_create(&stopper, NULL, request_stop, NULL));
-    invoke(4, (uintptr_t)result);
+    invoke(kind, (uintptr_t)result);
     assert(!pthread_join(stopper, NULL)); wait_phase(2);
     d2r_trace_header before, after; read_header(&before);
     assert(before.flags == D2R_TRACE_CLOSED && before.records == 1 && before.pops == 1);
@@ -311,10 +323,11 @@ int main(int argc, char **argv) {
     thread_and_overflow(); puts("PASS thread violation and capacity failure still forward once");
     profile_rejections(); puts("PASS profile argument and module-bounds rejections");
     hashes_and_tables(); puts("PASS synthetic hash guards and full negative-header/14-slot/26-slot clones");
-    uintptr_t targets[4] = {1, 1, 1, 1};
+    uintptr_t targets[D2R_TRACE_KIND_COUNT] = {1, 1, 1, 1, 1, 1};
     errno = 0; assert(d2r_probe_test_start(path, 4096, server, client, targets, frame) == -1 && errno == EEXIST);
     puts("PASS exclusive trace creation preserves existing output");
-    explicit_barrier(); puts("PASS explicit stop waits through original/postpop and later calls only forward");
+    for (unsigned kind = 3; kind <= D2R_TRACE_KIND_COUNT; kind++) explicit_barrier(kind);
+    puts("PASS explicit stop waits through every server/client original/postpop and later calls only forward");
     abrupt_exit_is_unclosed(); puts("PASS abrupt _exit remains an unclosed prefix");
     public_capacity_fixture();
     return 0;

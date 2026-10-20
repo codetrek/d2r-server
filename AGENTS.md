@@ -23,8 +23,10 @@
   and returned to the menu. A separately built native observer later recorded a
   213-tick local movement run: all 62 system and 26 gameplay inputs matched
   their per-channel postpop bytes in order. This remains bounded single-process
-  local observation, not cross-channel global ordering. It does
-  not qualify Linux, a room worker, two-process transport, or multiplayer.
+  local observation, not cross-channel global ordering. A later six-seam v2
+  window advanced 205 ticks and matched 34 high / 571 low S2C ranges to client dequeues. Its
+  first run disconnected; the cause remains unresolved and observational
+  stability is unqualified. These windows do not qualify Linux, a room worker, two-process transport, or multiplayer.
 - Preserve the exact fixture, host, shader-chain, and run receipt identities.
   Source inspection, reconstructed bytes, Go cross-compilation, synthetic fixture
   tests, and container checks cannot substitute for game runtime qualification.
@@ -60,7 +62,10 @@
 - Record primary-source links for non-obvious platform and function-address
   assumptions. Preserve TLS/SVC wrappers, guest thread context, and buffer
   lifetimes; analysis-body offsets are not standalone ABI call entries.
-- Native traces describe attempts and postpop observations, never proven network
+- Trace v2 observes six boundaries. Only server pops contain CID4; client
+  high/low pops are payload-only and do not prove state application. Historical
+  v1 artifacts retain their old scope. Native traces describe attempts and
+  postpop observations, never proven network
   deliveries. Require explicit `D2R_PROBE_STOP_PATH` capture admission closure
   and draining; the host uses `_exit`, so atexit cannot close the capture. Keep
   incomplete/error/gap/overflow/foreign-thread captures ineligible. Closure covers

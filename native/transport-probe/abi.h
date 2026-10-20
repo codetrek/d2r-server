@@ -34,5 +34,7 @@ void d2r_probe_server_send(void);
 void d2r_probe_client_send(void);
 void d2r_probe_system_pop(void);
 void d2r_probe_gameplay_pop(void);
+void d2r_probe_client_high_pop(void);
+void d2r_probe_client_low_pop(void);
 #endif
 #endif

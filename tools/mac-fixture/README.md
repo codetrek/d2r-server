@@ -19,7 +19,8 @@
 在仓库根目录运行，将尖括号中的内容替换为实际路径：
 
 ```sh
-uv run --locked --project tools/mac-fixture d2r-mac-fixture \
+UV_CACHE_DIR="$PWD/.tmp/uv" UV_PROJECT_ENVIRONMENT="$PWD/.tmp/venv-mac-fixture" \
+UV_PYTHON_INSTALL_DIR="$PWD/.tmp/python" uv run --locked --project tools/mac-fixture d2r-mac-fixture \
   --app '<已解包的 iPhone App.app>' \
   --resources '<包含 data/ 的游戏资源文件夹>' \
   --source '<含固定上游提交的 Git 仓库>' \
@@ -46,7 +47,8 @@ uv run --locked --project tools/mac-fixture d2r-mac-fixture \
 此入口接受已经成功发布的基线候选，以及本仓库的 `native/transport-probe/` 源码，不需要重新生成数据表或翻译着色器：
 
 ```sh
-uv run --locked --project tools/mac-fixture d2r-mac-probe-build \
+UV_CACHE_DIR="$PWD/.tmp/uv" UV_PROJECT_ENVIRONMENT="$PWD/.tmp/venv-mac-fixture" \
+UV_PYTHON_INSTALL_DIR="$PWD/.tmp/python" uv run --locked --project tools/mac-fixture d2r-mac-probe-build \
   --fixture '<已准备好的私有基线目录>' \
   --probe-source '<本仓库的 native/transport-probe 目录>' \
   --out '<尚不存在的私有观察变体目录>'
@@ -60,18 +62,19 @@ uv run --locked --project tools/mac-fixture d2r-mac-probe-build \
 -Drun_module_inits=d2r_observed_run_module_inits
 ```
 
-其余原始宿主源码保留相同编译参数，`loader.c` 只链接一次。原生包装器在真实模块初始化返回后、进入 `nnMain` 前安装观察器；只有 `integration.c` 依赖上游 `dm.h`。构建回执保留编译命令、源码哈希、主对象哈希、编译器身份及符号检查：主对象只能引用包装器，最终二进制中的真实初始化函数、包装器与四个观察垫片分别只有一个定义。
+其余原始宿主源码保留相同编译参数，`loader.c` 只链接一次。原生包装器在真实模块初始化返回后、进入 `nnMain` 前安装观察器；只有 `integration.c` 依赖上游 `dm.h`。构建回执保留编译命令、源码哈希、主对象哈希、编译器身份及符号检查：主对象只能引用包装器，最终二进制中的真实初始化函数、包装器与六个观察垫片分别只有一个定义。
 
 观察变体是**不同的二进制**，清单状态为 `built_unexecuted`。父候选的运行回执不自动适用于它。构建过程不会运行观察器、创建传输捕获、改写 Guest 代码页或改变父候选。后续受控执行必须显式提供 `D2R_PROBE_MODULES`、新的私有 `D2R_TRANSPORT_TRACE` 路径，以及安装时不存在的绝对路径 `D2R_PROBE_STOP_PATH`。
 
-控制方完成游戏与保存退出判据后，在停止路径创建属于本次运行的普通文件，等待捕获头发布 `CLOSED` 标志，再结束宿主。观察器先停止接纳新采样，等待已接纳的完整调用返回并同步文件；关闭后的调用继续转发，捕获内容保持稳定。控制线程只检查宿主文件和采样状态，不读取 Guest 内存。记录格式、关闭屏障与采样限制见原生源码目录的 `format.md`。
+控制方完成游戏与保存退出判据后，在停止路径创建属于本次运行的普通文件，等待捕获头发布 `CLOSED` 标志，再结束宿主。观察器先停止接纳新采样，等待已接纳的完整调用返回并同步文件；关闭后的调用继续转发，捕获内容保持稳定。控制线程只检查宿主文件和采样状态，不读取 Guest 内存。当前变体固定 trace 版本 2：两个发送尝试、两个服务端 CID 前缀出队、两个客户端纯载荷出队。记录格式、关闭屏障及各自证明范围见原生源码目录的 `format.md`；历史 v1 回执保持原有范围。
 
 ## 生命周期与验证边界
 
 基线候选依赖原 App、资源及源码路径；观察变体还依赖原父候选。不能移动、删除或改变这些输入后继续视为同一份已核对运行资料。两个入口都不建立游戏进程沙箱，也没有启动游戏的命令；Linux、多人、角色接入和 G0 仍需独立证明。
 
 ```sh
-uv run --locked --project tools/mac-fixture \
+UV_CACHE_DIR="$PWD/.tmp/uv" UV_PROJECT_ENVIRONMENT="$PWD/.tmp/venv-mac-fixture" \
+UV_PYTHON_INSTALL_DIR="$PWD/.tmp/python" uv run --locked --project tools/mac-fixture \
   python -m unittest discover -s tools/mac-fixture/tests
 ```
 

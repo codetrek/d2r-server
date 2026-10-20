@@ -7,7 +7,7 @@
 .p2align 2
 /* We retain the fixed profile's argument/result register bank across both C
  * observations, including the incoming indirect-result destination separately.
- * No stack arguments occur at these four recovered boundaries.
+ * No stack arguments occur at these six recovered boundaries.
  * https://github.com/ARM-software/abi-aa/blob/17f2cc8ee6645c1709088f4e0cb4438ce75a14ff/aapcs64/aapcs64.rst#result-return
  * The frame stays 16-byte aligned and Darwin's reserved x18 is untouched:
  * https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms */
@@ -26,6 +26,14 @@ _d2r_probe_system_pop:
 .globl _d2r_probe_gameplay_pop
 _d2r_probe_gameplay_pop:
     mov x16, #4
+    b Lprobe_entry
+.globl _d2r_probe_client_high_pop
+_d2r_probe_client_high_pop:
+    mov x16, #5
+    b Lprobe_entry
+.globl _d2r_probe_client_low_pop
+_d2r_probe_client_low_pop:
+    mov x16, #6
 Lprobe_entry:
     sub sp, sp, #D2R_ABI_FRAME_SIZE
     stp x29, x30, [sp, #D2R_ABI_STATE_SIZE]

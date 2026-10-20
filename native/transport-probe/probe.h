@@ -12,7 +12,7 @@ void d2r_probe_close(void);
 
 #ifdef D2R_PROBE_TESTING
 int d2r_probe_test_start(const char *path, size_t capacity, void *server,
-                         void *client, const uintptr_t targets[4], d2r_probe_frame_fn frame);
+                         void *client, const uintptr_t targets[D2R_TRACE_KIND_COUNT], d2r_probe_frame_fn frame);
 int d2r_probe_test_profile(const d2r_probe_module *modules, size_t count);
 int d2r_probe_test_digest(const char *directory, const char *name, size_t size,
                           const uint8_t expected[32]);
