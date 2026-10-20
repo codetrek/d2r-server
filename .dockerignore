@@ -1,0 +1,10 @@
+.git
+.tmp
+.worktrees
+bin
+coverage
+**/*.ipa
+**/*.nsp
+**/*.xci
+**/*.d2s
+**/*.d2i

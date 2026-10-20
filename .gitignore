@@ -1,0 +1,11 @@
+/.tmp/
+/bin/
+/coverage/
+/.worktrees/
+.DS_Store
+*.ipa
+*.nsp
+*.xci
+*.nso
+*.d2s
+*.d2i

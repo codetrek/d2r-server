@@ -1,0 +1,21 @@
+[thresholds]
+total = 85
+package = 80
+function = 50
+print = 85
+
+[test]
+timeout = "5m"
+race = true
+
+[exclude]
+packages = ["github.com/codetrek/d2r-server/cmd/"]
+files = []
+funcs = []
+func_suffixes = []
+
+[html]
+enabled = false
+
+[critical_blocks]
+fail = false

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "purpose": "Static provenance record for research and future dependency qualification; not an installed SDK or runtime dependency.",
+  "upstream": {
+    "repository": "https://github.com/jhaizhou-ops/d2r-mobile",
+    "revision": "120fe55c02a5633476998a44f8c3c3c809fa48b0",
+    "tag_at_research": "v1.0.18",
+    "source_acquisition": "not_vendored",
+    "shared_component_status": "not_extracted"
+  },
+  "client_fork": {
+    "repository": "https://github.com/codetrek/d2r-mobile",
+    "compatible_revision_status": "not_qualified"
+  },
+  "research_artifacts": {
+    "guest": {
+      "format": "ARM64 Mach-O",
+      "sha256": "9b470fb516c9c19ece5d70019c003e9140d402c1221a138e981ba871111f2a31",
+      "size_bytes": 69753648,
+      "distribution": "private_input_only"
+    },
+    "fixups": {
+      "name": "main.fixups.tsv",
+      "sha256": "87227ecf899cb746c3bc49c9b693df69ba6d205d4fef324ea01bbe7fa5d6318b",
+      "distribution": "private_input_only"
+    },
+    "reconstructed_image": {
+      "name": "main.patched.reconstructed.bin",
+      "sha256": "30384eabe394cbc6b6a0b7f3788983d58dc14a92b7abe1638853dc4833cf81f1",
+      "size_bytes": 54378496,
+      "purpose": "analysis_only_not_executable",
+      "distribution": "private_output_only"
+    }
+  },
+  "runtime_qualification": {
+    "guest_execution": false,
+    "linux_game_worker": false,
+    "multiplayer": false,
+    "gates_passed": []
+  }
+}
