@@ -151,6 +151,60 @@
       "qualifies_game_worker": false,
       "qualifies_g0": false,
       "reference": "docs/research/2026-10-21-s2c-client-consumption.md"
+    },
+    "bounded_lifecycle_observer": {
+      "scope": "darwin-arm64 full_client_singleplayer two explicitly_closed host-callback and transport diagnostic windows; historical disconnect unresolved",
+      "variant_manifest_sha256": "84d1c29c460cac4c913b076c6f07e035afd00cd7a4d9fe83d280d70549848cf7",
+      "variant_host_sha256": "7802093c0924a5c57a71298b020d14b3433694e6efbf318f397033a60731c3a7",
+      "transport_format_version": 2,
+      "lifecycle_format_version": 1,
+      "windows": [
+        {
+          "condition": "baseline",
+          "transport_sha256": "0ddb5809541ce992b1b8032f7e0ba6062ac406dcf9f68b76d1fbba3c98cc957c",
+          "lifecycle_sha256": "af168095157311a72b072c424b2ea9fc66050b5516fd466f484f7032ca54a7a0",
+          "max_tick": 205,
+          "elapsed_seconds": 15.594,
+          "transport_records": 2364,
+          "lifecycle_records": 1214,
+          "host_callbacks": 607,
+          "pending_error_observed": false,
+          "system_exact_pairs": 62,
+          "gameplay_exact_pairs": 26,
+          "s2c_high_exact_ranges": 34,
+          "s2c_low_exact_ranges": 566,
+          "save_commits_after_exit": 5,
+          "original_backup_unchanged": true,
+          "returned_menu": true,
+          "exit_code": 0,
+          "both_files_integrity_eligible": true
+        },
+        {
+          "condition": "one_ghidra_analysis",
+          "transport_sha256": "f172041f83bc60ddae8dc13e71e7295f759ba7f6dab2f535ab1322155c51b01b",
+          "lifecycle_sha256": "7014ea3578e414e984d73bd7353ef03a1b469d5c7e65070e43a545b428466baf",
+          "max_tick": 213,
+          "elapsed_seconds": 15.351,
+          "transport_records": 2392,
+          "lifecycle_records": 1104,
+          "host_callbacks": 552,
+          "pending_error_observed": false,
+          "system_exact_pairs": 62,
+          "gameplay_exact_pairs": 26,
+          "s2c_high_exact_ranges": 34,
+          "s2c_low_exact_ranges": 560,
+          "save_commits_after_exit": 3,
+          "original_backup_unchanged": true,
+          "returned_menu": true,
+          "exit_code": 0,
+          "both_files_integrity_eligible": true
+        }
+      ],
+      "historical_disconnect_cause_resolved": false,
+      "observational_stability_qualified": false,
+      "qualifies_g0": false,
+      "qualifies_game_worker": false,
+      "reference": "docs/research/2026-10-21-lifecycle-observation.md"
     }
   }
 }

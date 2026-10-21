@@ -19,6 +19,8 @@ from .process import Runner, check_scopes, new_output, sha256, write_json
 
 BASELINE_CFLAGS = "-O1 -g -Wall -Wno-unused-function -mmacosx-version-min=26.0 -DDM_SHELL=1"
 MAIN_RENAME = "-Drun_module_inits=d2r_observed_run_module_inits"
+HLE_RENAME = "-Dgate_obs_set=d2r_upstream_gate_obs_set"
+UPSTREAM_TRANSLATION_UNITS = {"main.c": MAIN_RENAME, "hle.c": HLE_RENAME}
 MODULE_PROFILE = {
     "main": (54378496, "30384eabe394cbc6b6a0b7f3788983d58dc14a92b7abe1638853dc4833cf81f1"),
     "sdk": (15204352, "d48f2cc33f3e506d623f873ba447c88fe0aea989b98c4057e2481b6ca3988fa2"),
@@ -158,14 +160,17 @@ def parse_host_command(output: str) -> tuple[list[str], list[str], list[str]]:
     if len(commands) != 1:
         raise ValueError("dry make must produce exactly one clang host command")
     command = commands[0]
-    if command.count("-o") != 1 or command.count("main.c") != 1 or command.count("loader.c") != 1:
-        raise ValueError("baseline host command must contain one main.c, loader.c and output")
+    if command.count("-o") != 1 or any(command.count(name) != 1 for name in
+                                      (*UPSTREAM_TRANSLATION_UNITS, "loader.c")):
+        raise ValueError("baseline host command must contain one main.c, hle.c, loader.c and output")
     output_index = command.index("-o")
     if command[output_index + 1] != "dmhost":
         raise ValueError("baseline command has an unexpected output")
     prefix = command[:output_index]
     if prefix[1:1 + len(shlex.split(BASELINE_CFLAGS))] != shlex.split(BASELINE_CFLAGS):
         raise ValueError("baseline compiler flags differ from the prepared contract")
+    if any(token.startswith(("-Drun_module_inits", "-Dgate_obs_set")) for token in prefix):
+        raise ValueError("translation-unit instrumentation cannot enter baseline compiler flags")
     body = command[output_index + 2:]
     framework_index = body.index("-framework")
     sources, framework_flags = body[:framework_index], body[framework_index:]
@@ -180,17 +185,22 @@ def symbol_rows(output: str, symbol: str) -> list[str]:
             if len(line.split()) >= 2 and line.split()[-1] == symbol]
 
 
-def verify_symbols(main_object: str, final_binary: str, required: list[str]) -> dict:
+def verify_symbols(main_object: str, hle_object: str, final_binary: str, required: list[str]) -> dict:
     wrapper, original = "_d2r_observed_run_module_inits", "_run_module_inits"
     if symbol_rows(main_object, wrapper) != ["U"] or symbol_rows(main_object, original):
         raise ValueError("original main object must reference only the observed init wrapper")
+    gate_wrapper, gate_original = "_gate_obs_set", "_d2r_upstream_gate_obs_set"
+    if (symbol_rows(hle_object, gate_original) != ["T"]
+            or symbol_rows(hle_object, gate_wrapper)):
+        raise ValueError("original hle object must define only the renamed upstream gate setter")
     result = {}
     for symbol in ("_" + name for name in required):
         rows = symbol_rows(final_binary, symbol)
         if len(rows) != 1 or rows[0] not in ("T", "t"):
-            raise ValueError(f"final binary must define exactly one init symbol: {symbol}")
+            raise ValueError(f"final binary must define exactly one required symbol: {symbol}")
         result[symbol] = rows[0]
-    return {"main_object_undefined": wrapper, "final_single_definitions": result}
+    return {"main_object_undefined": wrapper, "hle_object_single_definition": gate_original,
+            "final_single_definitions": result}
 
 
 def validate_native_profile(profile: dict) -> None:
@@ -198,15 +208,22 @@ def validate_native_profile(profile: dict) -> None:
             or profile["platform"] != "darwin" or profile["architecture"] != "arm64"
             or profile["pointer_bytes"] != 8 or profile["trace_format_version"] != 2
             or profile["main_translation_unit_define"] != MAIN_RENAME.removeprefix("-D")
+            or profile["hle_translation_unit_define"] != HLE_RENAME.removeprefix("-D")
             or profile["wrapper_symbol"] != "d2r_observed_run_module_inits"
             or profile["original_init_symbol"] != "run_module_inits"
+            or profile["gate_set_symbol"] != "gate_obs_set"
+            or profile["original_gate_set_symbol"] != "d2r_upstream_gate_obs_set"
             or profile["integration_source"] != "integration.c"
-            or profile["build_sources"] != ["integration.c", "profile.c", "observer.c", "shims.S"]
-            or profile["build_headers"] != ["format.h", "abi.h", "probe.h", "internal.h"]
+            or profile["build_sources"] != ["integration.c", "profile.c", "observer.c", "shims.S",
+                                            "lifecycle.c", "gate.c"]
+            or profile["build_headers"] != ["format.h", "abi.h", "probe.h", "internal.h", "lifecycle.h"]
+            or len(profile["required_symbols"]) != 10
             or set(profile["required_symbols"]) != {"d2r_observed_run_module_inits", "run_module_inits",
                 "d2r_probe_server_send", "d2r_probe_client_send", "d2r_probe_system_pop", "d2r_probe_gameplay_pop",
-                "d2r_probe_client_high_pop", "d2r_probe_client_low_pop"}
-            or profile["required_environment"] != ["D2R_PROBE_MODULES", "D2R_TRANSPORT_TRACE", "D2R_PROBE_STOP_PATH"]):
+                "d2r_probe_client_high_pop", "d2r_probe_client_low_pop", "gate_obs_set",
+                "d2r_upstream_gate_obs_set"}
+            or profile["required_environment"] != ["D2R_PROBE_MODULES", "D2R_TRANSPORT_TRACE",
+                                                    "D2R_PROBE_STOP_PATH", "D2R_LIFECYCLE_TRACE"]):
         raise ValueError("native observer source profile differs from the supported build contract")
     for module, (size, digest) in MODULE_PROFILE.items():
         if profile["modules"][module] != {"filename": f"{module}.patched.bin", "size": size, "sha256": digest}:
@@ -253,6 +270,34 @@ def probe_environment(root: Path, fixture: Path) -> dict[str, str]:
     return result
 
 
+def compile_variant(runner: Runner, prefix: list[str], sources: list[str], frameworks: list[str],
+                    host: Path, native: Path, native_hashes: dict[str, str],
+                    build_sources: list[str], root: Path) -> tuple[Path, dict[str, Path], list[str]]:
+    objects = root / "objects"
+    objects.mkdir()
+    upstream_objects = {}
+    for name, rename in UPSTREAM_TRANSLATION_UNITS.items():
+        stem = Path(name).stem
+        output = objects / f"upstream-{stem}.o"
+        runner.run(f"compile-{stem}", [*prefix, rename, "-c", name, "-o", str(output)], host)
+        upstream_objects[name] = output
+    native_objects = []
+    for index, name in enumerate(build_sources):
+        path = inside(native, name)
+        if name not in native_hashes or path.suffix not in (".c", ".S"):
+            raise ValueError(f"native build source is not a recorded C/assembly input: {name}")
+        output = objects / f"native-{index}.o"
+        runner.run(f"compile-native-{index}", [*prefix, "-I", str(native), "-I", str(host),
+                   "-c", str(path), "-o", str(output)], host)
+        native_objects.append(str(output))
+    (root / "bin").mkdir()
+    binary = root / "bin/dmhost-transport-probe"
+    remaining = [name for name in sources if name not in upstream_objects]
+    runner.run("link-host", [*prefix, "-o", str(binary), *remaining,
+               *(str(path) for path in upstream_objects.values()), *native_objects, *frameworks], host)
+    return binary, upstream_objects, remaining
+
+
 def build(options: ProbeOptions) -> dict:
     if sys.platform != "darwin" or platform.machine() != "arm64":
         raise ValueError("the native transport observer build requires Apple Silicon macOS")
@@ -297,27 +342,14 @@ def build(options: ProbeOptions) -> dict:
         native, native_hashes = snapshot_native_sources(options.probe_source, root)
         profile = json.loads((native / "profile.json").read_text())
         validate_native_profile(profile)
-        objects = root / "objects"
-        objects.mkdir()
-        main_object = objects / "upstream-main.o"
-        runner.run("compile-main", [*prefix, MAIN_RENAME, "-c", "main.c", "-o", str(main_object)], host)
-        native_objects = []
-        for index, name in enumerate(profile["build_sources"]):
-            path = inside(native, name)
-            if name not in native_hashes or path.suffix not in (".c", ".S"):
-                raise ValueError(f"native build source is not a recorded C/assembly input: {name}")
-            output = objects / f"native-{index}.o"
-            runner.run(f"compile-native-{index}", [*prefix, "-I", str(native), "-I", str(host),
-                       "-c", str(path), "-o", str(output)], host)
-            native_objects.append(str(output))
-        (root / "bin").mkdir()
-        binary = root / "bin/dmhost-transport-probe"
-        remaining = [name for name in sources if name != "main.c"]
-        runner.run("link-host", [*prefix, "-o", str(binary), *remaining, str(main_object),
-                   *native_objects, *framework_flags], host)
-        runner.run("nm-main", ["xcrun", "nm", "-g", str(main_object)], root)
+        binary, upstream_objects, remaining = compile_variant(
+            runner, prefix, sources, framework_flags, host, native, native_hashes,
+            profile["build_sources"], root)
+        for name, path in upstream_objects.items():
+            runner.run(f"nm-{Path(name).stem}", ["xcrun", "nm", "-g", str(path)], root)
         runner.run("nm-host", ["xcrun", "nm", "-g", str(binary)], root)
         symbols = verify_symbols((root / "logs/nm-main.log").read_text(),
+                                 (root / "logs/nm-hle.log").read_text(),
                                  (root / "logs/nm-host.log").read_text(), profile["required_symbols"])
         recheck_source(source, source_records)
         verify_parent(options.fixture, parent, parent_hash)
@@ -329,8 +361,13 @@ def build(options: ProbeOptions) -> dict:
             "upstream": parent["upstream"], "upstream_source_identity": source_records,
             "native_source": {"path": str(options.probe_source), "sha256": native_hashes, "profile": profile},
             "instrumentation": {"main_macro": MAIN_RENAME, "main_source": "dm/host/main.c",
-                                "main_object_sha256": sha256(main_object), "symbols": symbols,
+                                "main_source_sha256": source_records["dm/host/main.c"]["sha256"],
+                                "main_object_sha256": sha256(upstream_objects["main.c"]),
+                                "hle_macro": HLE_RENAME, "hle_source": "dm/host/hle.c",
+                                "hle_source_sha256": source_records["dm/host/hle.c"]["sha256"],
+                                "hle_object_sha256": sha256(upstream_objects["hle.c"]), "symbols": symbols,
                                 "original_main_occurrences": sources.count("main.c"),
+                                "original_hle_occurrences": sources.count("hle.c"),
                                 "original_loader_occurrences": remaining.count("loader.c"),
                                 "baseline_cflags": BASELINE_CFLAGS},
             "host": {"path": "bin/dmhost-transport-probe", "sha256": sha256(binary)},
@@ -338,12 +375,13 @@ def build(options: ProbeOptions) -> dict:
             "builder_sha256": sha256(Path(__file__)),
             "runtime_requirements": {"D2R_PROBE_MODULES": str(options.fixture / "runtime-modules"),
                                      "D2R_TRANSPORT_TRACE": "Explicit NEW private capture path required at execution",
-                                     "D2R_PROBE_STOP_PATH": "Explicit absolute private stop-marker path, absent at installation"},
+                                     "D2R_PROBE_STOP_PATH": "Explicit absolute private stop-marker path, absent at installation",
+                                     "D2R_LIFECYCLE_TRACE": "Explicit NEW private lifecycle diagnostic path required at execution"},
             "capture_shutdown": "After the save-exit goal, create this run's regular stop file; wait for CLOSED before terminating the host.",
             "stages": runner.receipts,
             "limitations": ["No engine, shader, transport or multiplayer execution was performed by this builder.",
                             "The binary is a distinct instrumented variant; parent runtime receipts do not qualify it.",
-                            "The original upstream sources are unchanged; the main compilation macro changes binary identity.",
+                            "The original upstream sources are unchanged; main and hle translation-unit macros change binary identity.",
                             "The output depends on the unchanged parent fixture and its original app/resource/source paths."],
         }
         write_json(root / "manifest.json", manifest)

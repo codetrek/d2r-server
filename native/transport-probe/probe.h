@@ -7,6 +7,7 @@ typedef struct { const char *name; uint8_t *base; size_t size; } d2r_probe_modul
 typedef uint64_t (*d2r_probe_frame_fn)(void);
 int d2r_probe_install(const d2r_probe_module *modules, size_t count,
                       const char *module_directory, const char *trace_path, const char *stop_path,
+                      const char *lifecycle_path,
                       d2r_probe_frame_fn frame);
 void d2r_probe_close(void);
 

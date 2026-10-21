@@ -15,7 +15,8 @@ void d2r_observed_run_module_inits(void) {
     for (int i = 0; i < g_nmod; i++)
         modules[i] = (d2r_probe_module){g_mod[i].name, g_mod[i].base, g_mod[i].size};
     if (d2r_probe_install(modules, (size_t)g_nmod, getenv("D2R_PROBE_MODULES"),
-                           getenv("D2R_TRANSPORT_TRACE"), getenv("D2R_PROBE_STOP_PATH"), dm_guest_frame)) {
+                           getenv("D2R_TRANSPORT_TRACE"), getenv("D2R_PROBE_STOP_PATH"),
+                           getenv("D2R_LIFECYCLE_TRACE"), dm_guest_frame)) {
         fprintf(stderr, "d2r probe: profile or trace installation failed (errno %d)\n", errno);
         abort();
     }

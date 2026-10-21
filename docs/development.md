@@ -13,8 +13,8 @@
 | `cmd/d2r-inspect/` | 静态布局检查命令行入口。 |
 | `internal/guestlayout/` | 显式选择 main/sdk 的 Mach-O/fixups 校验、映像重建、schema 2 来源清单和新目录发布。 |
 | `internal/guestingress/` | 单条内部队列项和接收缓冲区的精确编解码与自有字节副本。 |
-| `internal/transporttrace/`、`cmd/d2r-trace/` | 固定私人 trace v2 的受界限读取、六类完整性判据及 JSON schema 2 报告。 |
-| `native/transport-probe/` | 固定 Darwin ARM64 六处画像、ABI 垫片、纯载荷客户端出队及显式窗口结束屏障。 |
+| `internal/transporttrace/`、`internal/lifecycletrace/`、`cmd/d2r-trace/` | 传输 trace v2 与独立状态 trace v1 的有界读取、完整性判据和紧凑报告；不推定断开原因。 |
+| `native/transport-probe/` | 固定六处传输画像、UI/tick 宿主回调包装、原始状态快照及双文件结束屏障。 |
 | `cmd/d2r-server/` | 控制服务入口与关闭生命周期。 |
 | `internal/control/` | 健康、就绪和能力查询 HTTP 处理及请求日志。 |
 | `tools/mac-fixture/` | uv 锁定的 Python 私人 Mac 基线与观察变体构建工具，均不执行游戏。 |
@@ -75,7 +75,7 @@ CI 设置 Linux 和 macOS 的 `check` / `cross-build` 通道、Linux/macOS 的 P
 
 2026-10-20 的基础设施基线已通过 `make check`、`make build`、Linux amd64/arm64 交叉构建，以及 Docker 中 Linux ARM64 的全包竞态测试和 `go vet`，当时核心包总覆盖率为 88.2%。对应最终镜像以默认非 root 身份启动，健康、未就绪及能力响应正确，正常停止状态码为 0；镜像内检查工具使用自有输入重建出历史一致映像，私人记录位于 `.tmp/container-validation/verification.json`。
 
-本次 main/sdk 与候选工具变更的完整 `make check` 通过，核心包总覆盖率 91.2%；逐包为 `transporttrace` 96.0%、`guestlayout` 86.3%、`guestingress` 90.6%、`control` 98.3%，`d2r-trace` 命令测试覆盖率为 92.0%。`make fixture-test` 的 23 项合成测试通过，真实自有输入的准备流程另有全部 15 阶段成功记录。独立审查指出的运行元数据检查与复制之间的身份问题已经修复并复核，无未解决 critical/major。各分支 Docker 和远程 CI 必须以该分支实际结果为准，配置和历史绿色结果不代表当前变更已通过。
+本次 main/sdk 与候选工具变更的完整 `make check` 通过，核心包总覆盖率 92.7%；逐包为 `lifecycletrace` 99.2%、`transporttrace` 96.0%、`guestlayout` 86.3%、`guestingress` 90.6%、`control` 98.3%，`d2r-trace` 命令测试覆盖率为 92.0%。`make fixture-test` 的 24 项合成测试通过，真实自有输入的准备流程另有全部 15 阶段成功记录。独立审查指出的运行元数据检查与复制之间的身份问题已经修复并复核，无未解决 critical/major。各分支 Docker 和远程 CI 必须以该分支实际结果为准，配置和历史绿色结果不代表当前变更已通过。
 
 最终准备候选另行在受约束的 Mac 实验中运行，进入本地世界推进 159 tick，正常保存退出返回菜单；退出请求后记录 3 次保存提交，角色输出变化，原始备份保持不变，随后进程退出码 0。完整身份、输入保护和证据范围见 [Mac 运行报告](research/2026-10-20-mac-runtime-fixture.md)。这证明限定的 Mac 完整客户端单机路径；Linux 引擎、房间、双进程桥接、多人及故障持久化均未获资格。后续独立原生变体还完成 213 tick 实际移动，系统 62 条、玩法 26 条输入与各自有效出队逐条精确且顺序一致；原生测试、ASAN/UBSAN 及独立审查通过，记录见[原生观察报告](research/2026-10-20-native-transport-probe.md)。
 
@@ -103,15 +103,15 @@ TVFS 的 133,200 条路径不代表所有内容档案都存在；已验证的 3,
 
 ## 原生观察与紧凑 trace 报告
 
-`d2r-mac-probe-build` 验证已准备父候选，再从未修改的固定上游源码和原生只读快照构建独立变体。只有原始 `main.c` 使用初始化包装宏，真实初始化函数及垫片符号必须单一定义。构建只生成 `built_unexecuted`，实际执行必须另有清单，具体便携命令见[工具文档](../tools/mac-fixture/README.md)。
+`d2r-mac-probe-build` 验证已准备父候选，再从未修改的固定上游源码和原生只读快照构建独立变体。原始 `main.c`、`hle.c` 分别使用独立的初始化和注册包装宏；每份对象和最终二进制的原始/包装符号均需单一定义。构建只生成 `built_unexecuted`，实际执行必须另有清单，具体便携命令见[工具文档](../tools/mac-fixture/README.md)。
 
 采样固定 Darwin ARM64 画像并保留原方法参数、返回及 `x8` 间接结果。发送只记调用尝试，原忽略路径不读描述符；出队先检查有效字节，空结果不读未初始化内容。实际 trace 仅写私人目录，禁止网络，输入和参考备份受只读约束。
 
 运行显式提供 `D2R_PROBE_STOP_PATH`，在游戏与保存退出断言达到后创建所属标记；观察器关闭新准入并等待在途原方法和出队复制完成，发布 `CLOSED` 后控制方才结束宿主。区间外继续纯转发，不能依赖宿主 `_exit` 调用 atexit。文件完整性只覆盖声明窗口。
 
-`d2r-trace -input TRACEPATH [-report NEW_JSON]` 验证固定头、计数、记录、标志、模式与连接前缀，复用内部入口解码器；只读取提交前缀，分配受单条观察上限约束。当前仅支持 trace v2 / JSON schema 2，JSON 为六类紧凑统计与摘要，不输出载荷、地址、玩家或无限记录表。报告文件排他创建为 0600；错误/缺口/未关闭或容量截断均不能通过，损坏和不合格退出 1。模式 1/3 错标客户端忽略的审查问题已有负例回归。
+`d2r-trace -input TRACEPATH [-format transport|lifecycle] [-report NEW_JSON]` 验证固定头、计数、记录、标志、模式与连接前缀，复用内部入口解码器；只读取提交前缀，分配受单条观察上限约束。默认读取传输 trace v2 / JSON schema 2 的六类统计；显式 `-format lifecycle` 读取独立状态 trace v1，输出两个门、嵌套、原始错误编号和首个待处理错误的有限上下文，不输出载荷、地址、玩家或无限记录表。报告文件排他创建为 0600；错误/缺口/未关闭或容量截断均不能通过，损坏和不合格退出 1。模式 1/3 错标客户端忽略的审查问题已有负例回归。
 
-历史 v1 的精确对照不证明 S2C 消费；当前 v2 增加客户端 `+0/+8` 高/低队列出队，返回范围没有 CID，不能交给服务端接收表示解码器。605 条实际下行范围在各自分桶内逐条字节有序相等，客户端出队仍不等于状态应用或跨队列全局顺序。初次断开和后续两项转调对照、成功诊断的完整范围见[客户端出队报告](research/2026-10-21-s2c-client-consumption.md)。`capture_integrity_eligible` 不修改 G0 或生产引擎资格。原生格式和 ABI 以[格式文档](../native/transport-probe/format.md)为准。
+历史 v1 的精确对照不证明 S2C 消费；当前 v2 增加客户端 `+0/+8` 高/低队列出队，返回范围没有 CID，不能交给服务端接收表示解码器。605 条实际下行范围在各自分桶内逐条字节有序相等，客户端出队仍不等于状态应用或跨队列全局顺序。初次断开和后续两项转调对照、成功诊断的完整范围见[客户端出队报告](research/2026-10-21-s2c-client-consumption.md)。`capture_integrity_eligible` 不修改 G0 或生产引擎资格。原生传输格式和 ABI 以[格式文档](../native/transport-probe/format.md)为准；状态语义和双文件关闭见[状态格式](../native/transport-probe/lifecycle.md)及[两个实际窗口](research/2026-10-21-lifecycle-observation.md)。共享状态位不是错误独占标志，读取器使用非零待处理期限判定，原程序计时保持原值。
 
 ## 输出目录的原子发布
 
