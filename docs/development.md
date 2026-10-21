@@ -2,9 +2,9 @@
 
 ## 工程状态
 
-本仓库维护服务端工具、Go 控制进程，以及后续 Linux 游戏宿主、网关、房间管理、持久化和部署代码。当前实现包括 `d2r-inspect` 静态布局检查与 `d2r-server` 控制进程；游戏工作进程、联网游戏、SQLite 状态目录和存档恢复尚未实现。设计中的 G0–G5 均未通过。
+本仓库维护服务端工具、Go 控制进程，以及后续 Linux 游戏宿主、网关、房间管理、持久化和部署代码。当前实现包括 `d2r-inspect` 静态布局检查、`internal/guestingress` 内部入口编解码与 `d2r-server` 控制进程；游戏工作进程、联网游戏、SQLite 状态目录和存档恢复尚未实现。设计中的 G0–G5 均未通过。
 
-普通源码检查不需要专有输入，使用合成 Mach-O/fixups 测试布局解析、失败条件、来源摘要、输出发布和命令行行为。控制进程测试核对健康、未就绪与能力声明。游戏实测必须另有私有验证记录，不能用 Go 测试或跨平台编译替代。
+普通源码检查不需要专有输入，使用合成 Mach-O/fixups 测试布局解析、失败条件、来源摘要、输出发布和命令行行为。内部入口测试使用合成载荷核对精确字节、声明长度、截断/尾随数据、整数范围及独立字节归属。控制进程测试核对健康、未就绪与能力声明。游戏实测必须另有私有验证记录，不能用 Go 测试或跨平台编译替代。
 
 ## 目录与代码归属
 
@@ -12,9 +12,11 @@
 |---|---|
 | `cmd/d2r-inspect/` | 静态布局检查命令行入口。 |
 | `internal/guestlayout/` | Mach-O/fixups 校验、映像重建、来源清单和新目录发布。 |
+| `internal/guestingress/` | 单条内部队列项和接收缓冲区的精确编解码与自有字节副本。 |
 | `cmd/d2r-server/` | 控制服务入口与关闭生命周期。 |
 | `internal/control/` | 健康、就绪和能力查询 HTTP 处理及请求日志。 |
 | `docs/design/` | 已接受的有条件设计、证据、未解问题与验收条件。 |
+| `docs/research/` | 按实验主题整理的静态研究结论、证据身份和运行验证限制。 |
 | `upstream.lock.json` | 固定原始上游提交与私人研究产物身份。 |
 | `.tmp/` | 忽略的私人输入、实验输出、调研工具及验证材料。 |
 | `bin/` | 本地构建输出。 |
@@ -62,9 +64,19 @@ make build
 
 CI 设置 Linux 和 macOS 的 `check` / `cross-build` 通道，以及独立的 Linux Docker 测试和镜像构建通道。Docker 基础镜像固定为 Go 1.26.10 Bookworm 的摘要；最终 `scratch` 镜像用 UID/GID `65532:65532` 运行，容器默认监听 `0.0.0.0:8080`。本机默认监听 `127.0.0.1:8080`，关闭超时为 `5s`。
 
-2026-10-20 已通过 `make check`、`make build`、Linux amd64/arm64 交叉构建，以及 Docker 中 Linux ARM64 的全包竞态测试和 `go vet`，核心包总覆盖率为 88.2%。最终镜像已用默认非 root 身份启动，验证健康、未就绪和能力响应，并在正常停止后以状态码 0 退出。镜像内检查工具也已使用真实自有输入重建出与历史记录一致的映像；本地记录位于 `.tmp/container-validation/verification.json`。独立代码审查未发现未解决的 critical/major 问题。这些验证记录不替代远程 CI 或原游戏引擎验证门槛，也不声称已实际运行 Linux amd64 游戏程序。
+2026-10-20 的基础设施基线已通过 `make check`、`make build`、Linux amd64/arm64 交叉构建，以及 Docker 中 Linux ARM64 的全包竞态测试和 `go vet`，当时核心包总覆盖率为 88.2%。对应最终镜像以默认非 root 身份启动，健康、未就绪及能力响应正确，正常停止状态码为 0；镜像内检查工具使用自有输入重建出历史一致映像，私人记录位于 `.tmp/container-validation/verification.json`。
+
+本次加入 `guestingress` 后，完整 `make check` 通过，核心包总覆盖率为 88.4%；逐包为 `guestingress` 90.6%、`control` 98.3%、`guestlayout` 86.0%。独立代码审查未留下 critical/major。本次源码结果、历史容器基线和各分支远程 CI 是不同的记录，不能互相替代；当前分支的 Docker 和远程 CI 只以该分支实际执行结果为准。以上均未证明原游戏引擎、Linux 游戏程序或多人联机通过验收。
 
 控制进程的 `/healthz` 表示进程存活，`/readyz` 在引擎未通过资格验证时返回 503。`/api/v1/capabilities` 当前返回 `game_worker: "unavailable"`、`multiplayer_available: false` 和计划约束 `target_max_players_per_room: 4`。普通源码与容器检查不替代私有引擎和真实设备集成记录。
+
+## 内部入口编解码的范围
+
+`internal/guestingress` 提供四个函数：`EncodeQueueEntry`、`DecodeQueueEntry`、`EncodeReceiverBuffer`、`DecodeReceiverBuffer`。前一对处理小端 `[u16 载荷长度][u32 连接号][载荷]`，后一对处理 `[u32 连接号][载荷]` 与单独的 `uint32` 载荷长度。解码要求恰好一条输入，所有结果拥有独立字节；不同调用不共享载荷存储。
+
+`MaxQueuePayload = 65535` 只对应内部队列长度字段，不是网络帧或游戏可安全接收长度。接收表示独立检查 `uint32` 和平台整数范围。连接号 `0` 和空载荷可通过表示层编解码，游戏入口是否接受则由消息语义和生命周期验证决定。该包不处理通道分类、整个动态队列、WSS、认证、游戏线程或入口调用；网络输入仍不得直接交给游戏。
+
+[G0 传输边界报告](research/2026-10-20-g0-transport-boundaries.md)记录具体方法、两级长度、默认本地下行、借用范围、同步复制及回调持有者约定。资源准备已从本地应用恢复 TVFS 路径索引，尚未形成可执行 Linux 工作进程；资源、构建和受控执行仍需单独资格验证。
 
 ## 输出目录的原子发布
 
@@ -89,6 +101,6 @@ CI 设置 Linux 和 macOS 的 `check` / `cross-build` 通道，以及独立的 L
 | `.tmp/experiments/` | 后续 G0–G5 实验的输入清单、范围受限日志、指标与实际断言约定。 |
 | `.tmp/inspect/` | `d2r-inspect` 每次调用新建输出目录的约定。 |
 
-REA 证据 ID 与独立清单保持不变，真实 REA 输出和普通 shell 反汇编继续分别标识。后续分析在本仓库内配置工具和输入，不依赖旧手机工作区。导入、重定位、TLS、构造器及运行时对象未初始化的限制继续保留；分析 ELF 和重建字节不是可运行的服务器。
+REA 证据 ID 与独立清单保持不变，真实 REA 输出和普通 shell 反汇编继续分别标识。当前 G0 材料分别保存在 `.tmp/experiments/g0-session/`、`.tmp/experiments/g0-hopper/`、`.tmp/experiments/g0-transport-source/`。它们包含完整私人结果、配置、清单及清理记录；公开文档只引用必要的身份和限定结论。后续分析在本仓库内配置工具和输入，不依赖旧手机工作区。导入、重定位、TLS、构造器及运行时对象未初始化的限制继续保留；分析 ELF 和重建字节不是可运行的服务器。
 
 每次实验记录源码与输入摘要、工具版本、平台及 CPU、命令、场景、实际和预期结果，以及通过或失败结论。失败保留原始原因；重试应说明发生改变的假设。公开文档只引用必要元数据和摘要，不公布专有输入或原始反编译内容。
