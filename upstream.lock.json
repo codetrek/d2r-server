@@ -205,6 +205,42 @@
       "qualifies_g0": false,
       "qualifies_game_worker": false,
       "reference": "docs/research/2026-10-21-lifecycle-observation.md"
-    }
+    },
+    "owned_pipe_roundtrip": {
+      "scope": "one actual Mac Guest world and one owned pipe child; not two Guest clients or multiplayer",
+      "variant_manifest_sha256": "14a74be1411fc5a4baabd135bfe03aa46c50fff1326564a10198f928d4e89ba4",
+      "host_sha256": "ba5f2f0007a0bd6070efd8e15072abf5d4ead9dbeaa969415e1f60609ab4ee5b",
+      "relay_binary_sha256": "c34824d2acf86376fe5eff38bbfd65f4d92aa008ca90969e26d85da364e82288",
+      "transport_sha256": "735e4d25dd07ddf756b980e0f72152ea087f7339b4031caf897eb64741de607b",
+      "lifecycle_sha256": "24ae81600a8247000a4fda00a9f2c1e7daf5f62982f32c52924bff6dabbef64b",
+      "relay_report_sha256": "53de21cabf2c8014d7ef026c70016aeac9b884edc024573ee9935b1b5275e5e5",
+      "framed_sha256": "2b2b79b0ff1fe127e0f7dd563fed8a46c3219ff2e468a38c235801f23b2df257",
+      "data_frames": 675,
+      "payload_bytes": 26526,
+      "framed_bytes": 48126,
+      "c2s_frames": 89,
+      "s2c_frames": 586,
+      "c2s_system_exact_pairs": 63,
+      "c2s_gameplay_exact_pairs": 26,
+      "s2c_high_exact_pairs": 34,
+      "s2c_low_exact_pairs": 552,
+      "max_tick": 205,
+      "same_player_distinct_coordinates": 7,
+      "save_commits_after_exit": 4,
+      "changed_character_count": 1,
+      "original_backup_unchanged": true,
+      "both_capture_files_integrity_eligible": true,
+      "pending_error_observed": false,
+      "guest_exit_code": 0,
+      "relay_exit_code": 0,
+      "explicit_close_ack_eof_checked_by_native": true,
+      "owned_pipe_roundtrip_qualified": true,
+      "two_guest_transport_qualified": false,
+      "g0_qualified": false,
+      "linux_game_worker_qualified": false,
+      "multiplayer_qualified": false,
+      "reference": "docs/research/2026-10-21-owned-pipe-relay.md"
+    },
+    "two_guest_transport_qualified": false
   }
 }

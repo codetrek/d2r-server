@@ -20,7 +20,7 @@ from d2r_mac_fixture.process import sha256
 REQUIRED = ["d2r_observed_run_module_inits", "run_module_inits", "d2r_probe_server_send",
             "d2r_probe_client_send", "d2r_probe_system_pop", "d2r_probe_gameplay_pop",
             "d2r_probe_client_high_pop", "d2r_probe_client_low_pop", "gate_obs_set",
-            "d2r_upstream_gate_obs_set"]
+            "d2r_upstream_gate_obs_set", "d2r_pipe_configure", "d2r_pipe_close"]
 
 
 def native_profile():
@@ -32,11 +32,13 @@ def native_profile():
             "wrapper_symbol": "d2r_observed_run_module_inits", "original_init_symbol": "run_module_inits",
             "gate_set_symbol": "gate_obs_set", "original_gate_set_symbol": "d2r_upstream_gate_obs_set",
             "integration_source": "integration.c",
-            "build_sources": ["integration.c", "profile.c", "observer.c", "shims.S", "lifecycle.c", "gate.c"],
-            "build_headers": ["format.h", "abi.h", "probe.h", "internal.h", "lifecycle.h"],
+            "build_sources": ["integration.c", "profile.c", "observer.c", "shims.S", "lifecycle.c", "gate.c", "relay.c"],
+            "build_headers": ["format.h", "abi.h", "probe.h", "internal.h", "lifecycle.h", "relay.h"],
             "required_symbols": REQUIRED,
             "required_environment": ["D2R_PROBE_MODULES", "D2R_TRANSPORT_TRACE", "D2R_PROBE_STOP_PATH",
-                                     "D2R_LIFECYCLE_TRACE"],
+                                     "D2R_LIFECYCLE_TRACE", "D2R_PROBE_MODE"],
+            "probe_modes": ["observe", "relay"],
+            "relay_environment": ["D2R_RELAY_READ_FD", "D2R_RELAY_WRITE_FD"],
             "modules": {name: {"filename": f"{name}.patched.bin", "size": size, "sha256": digest}
                         for name, (size, digest) in MODULE_PROFILE.items()}}
 
@@ -179,7 +181,10 @@ class ProbeBuildTest(unittest.TestCase):
                        lambda value: value["build_sources"].remove("gate.c"),
                        lambda value: value["build_headers"].remove("lifecycle.h"),
                        lambda value: value["required_environment"].remove("D2R_PROBE_STOP_PATH"),
-                       lambda value: value["required_environment"].remove("D2R_LIFECYCLE_TRACE")):
+                       lambda value: value["required_environment"].remove("D2R_LIFECYCLE_TRACE"),
+                       lambda value: value["required_environment"].remove("D2R_PROBE_MODE"),
+                       lambda value: value.update(probe_modes=["observe", "automatic"]),
+                       lambda value: value.update(relay_environment=[])):
             altered = copy.deepcopy(profile)
             change(altered)
             with self.assertRaises(ValueError):
@@ -205,10 +210,12 @@ class ProbeBuildTest(unittest.TestCase):
             with patch.dict(os.environ, {"PRIVATE_TOKEN": "secret", "D2R_TRANSPORT_TRACE": "private",
                                          "D2R_PROBE_STOP_PATH": "stop-marker",
                                          "D2R_LIFECYCLE_TRACE": "lifecycle",
+                                         "D2R_PROBE_MODE": "relay", "D2R_RELAY_READ_FD": "3", "D2R_RELAY_WRITE_FD": "4",
                                          "DM_SAVE": "original-save", "DM_CLOUD_REAL": "1"}):
                 env = probe_environment(root, root / "parent")
             for key in ("PRIVATE_TOKEN", "D2R_TRANSPORT_TRACE", "D2R_PROBE_STOP_PATH",
-                        "D2R_LIFECYCLE_TRACE", "DM_SAVE", "DM_CLOUD_REAL"):
+                        "D2R_LIFECYCLE_TRACE", "D2R_PROBE_MODE", "D2R_RELAY_READ_FD", "D2R_RELAY_WRITE_FD",
+                        "DM_SAVE", "DM_CLOUD_REAL"):
                 self.assertNotIn(key, env)
             self.assertEqual(env["HOME"], os.environ["HOME"])
             self.assertTrue(Path(env["TMPDIR"]).is_relative_to(root))

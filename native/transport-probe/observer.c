@@ -68,13 +68,13 @@ static int readable(uintptr_t pointer, size_t length) {
     return 1;
 }
 
-static void record(uint16_t kind, uint16_t flags, uint32_t cid, uint32_t mode,
+static d2r_trace_record *record(uint16_t kind, uint16_t flags, uint32_t cid, uint32_t mode,
                    const uint8_t *payload, size_t length, uint64_t original_length) {
     d2r_trace_header *h = context.header;
     size_t size = (D2R_TRACE_RECORD_HEADER_SIZE + length + 7u) & ~(size_t)7u;
     uint64_t at = __atomic_load_n(&h->committed, __ATOMIC_RELAXED);
     if (size > context.capacity || at > context.capacity - size) {
-        increment(&h->overflow); failure(); return;
+        increment(&h->overflow); failure(); return NULL;
     }
     d2r_trace_record item = {
         .record_size = (uint32_t)size, .kind = kind, .flags = flags,
@@ -88,33 +88,34 @@ static void record(uint16_t kind, uint16_t flags, uint32_t cid, uint32_t mode,
     memset(destination + sizeof item + length, 0, size - sizeof item - length);
     h->records++;
     __atomic_store_n(&h->committed, at + size, __ATOMIC_RELEASE);
+    return (d2r_trace_record *)destination;
 }
 
-static void span_record(uint16_t kind, uint16_t flags, uint32_t cid, uint32_t mode,
+static d2r_trace_record *span_record(uint16_t kind, uint16_t flags, uint32_t cid, uint32_t mode,
                         uintptr_t begin, uintptr_t end) {
     if (end < begin) {
-        failure(); record(kind, flags | D2R_RECORD_BAD_SPAN, cid, mode, NULL, 0, 0); return;
+        failure(); record(kind, flags | D2R_RECORD_BAD_SPAN, cid, mode, NULL, 0, 0); return NULL;
     }
     uint64_t length = end - begin;
     if (length > D2R_TRACE_OBSERVATION_CAP) {
-        failure(); record(kind, flags | D2R_RECORD_CAP_EXCEEDED, cid, mode, NULL, 0, length); return;
+        failure(); record(kind, flags | D2R_RECORD_CAP_EXCEEDED, cid, mode, NULL, 0, length); return NULL;
     }
     if (!readable(begin, (size_t)length) ||
         ((kind == D2R_TRACE_SYSTEM_POSTPOP || kind == D2R_TRACE_GAMEPLAY_POSTPOP) && length < 4)) {
-        failure(); record(kind, flags | D2R_RECORD_BAD_SPAN, cid, mode, NULL, 0, length); return;
+        failure(); record(kind, flags | D2R_RECORD_BAD_SPAN, cid, mode, NULL, 0, length); return NULL;
     }
     if (kind == D2R_TRACE_SYSTEM_POSTPOP || kind == D2R_TRACE_GAMEPLAY_POSTPOP) {
         memcpy(&cid, (const void *)begin, 4); flags |= D2R_RECORD_CLIENT_ID;
     }
-    record(kind, flags | D2R_RECORD_PAYLOAD, cid, mode, (const uint8_t *)begin, (size_t)length, length);
+    return record(kind, flags | D2R_RECORD_PAYLOAD, cid, mode, (const uint8_t *)begin, (size_t)length, length);
 }
-static void descriptor_record(uint16_t kind, uint16_t flags, uint32_t cid,
+static d2r_trace_record *descriptor_record(uint16_t kind, uint16_t flags, uint32_t cid,
                               uint32_t mode, uintptr_t descriptor) {
     if (!readable(descriptor, 16)) {
-        failure(); record(kind, flags | D2R_RECORD_BAD_SPAN, cid, mode, NULL, 0, 0); return;
+        failure(); record(kind, flags | D2R_RECORD_BAD_SPAN, cid, mode, NULL, 0, 0); return NULL;
     }
     uintptr_t span[2]; memcpy(span, (const void *)descriptor, sizeof span);
-    span_record(kind, flags, cid, mode, span[0], span[1]);
+    return span_record(kind, flags, cid, mode, span[0], span[1]);
 }
 static int enter_observation(void) {
     if (thread_id() != context.header->owner_thread) {
@@ -129,6 +130,7 @@ void d2r_probe_before(d2r_probe_abi *s) {
     unsigned kind = (unsigned)s->kind;
     s->target = context.targets[kind - 1];
     s->reserved = 0;
+    s->relay_call = 0;
     pthread_mutex_lock(&window_lock);
     if (context.phase != WINDOW_OPEN) {
         pthread_mutex_unlock(&window_lock); errno = saved_errno; return;
@@ -150,17 +152,35 @@ void d2r_probe_before(d2r_probe_abi *s) {
          * https://github.com/jhaizhou-ops/d2r-mobile/blob/120fe55c02a5633476998a44f8c3c3c809fa48b0/dm/host/dm_elysium.c#L334 */
         if (cid || mode != 1 || context.client[0x2f0])
             record(kind, D2R_RECORD_CLIENT_ID | D2R_RECORD_IGNORED, cid, mode, NULL, 0, 0);
-        else descriptor_record(kind, D2R_RECORD_CLIENT_ID, cid, mode, s->x[2]);
+        else {
+            d2r_trace_record *item = descriptor_record(kind, D2R_RECORD_CLIENT_ID, cid, mode, s->x[2]);
+            if (d2r_pipe_prepare(s, item)) goto relay_failure;
+            if (d2r_pipe_active()) {
+                memcpy(&mode, context.client + 0x14, 4);
+                if (mode != 1 || context.client[0x2f0]) { errno = ECANCELED; goto relay_failure; }
+            }
+        }
     } else if (kind == D2R_TRACE_CLIENT_SEND_ATTEMPT) {
         uint32_t mode; memcpy(&mode, context.client + 0x14, 4);
-        if (mode == 1) descriptor_record(kind, 0, 0, mode, s->x[1]);
+        if (mode == 1) {
+            d2r_trace_record *item = descriptor_record(kind, 0, 0, mode, s->x[1]);
+            if (d2r_pipe_prepare(s, item)) goto relay_failure;
+            if (d2r_pipe_active()) {
+                memcpy(&mode, context.client + 0x14, 4);
+                if (mode != 1) { errno = ECANCELED; goto relay_failure; }
+            }
+        }
         else if (mode == 3) {
             failure(); record(kind, D2R_RECORD_CAPTURE_GAP, 0, mode, NULL, 0, 0);
         } else record(kind, D2R_RECORD_IGNORED, 0, mode, NULL, 0, 0);
     } else s->reserved |= CALL_OBSERVE_POSTPOP;
     observing = 0; errno = saved_errno;
+    return;
+relay_failure:
+    failure(); fprintf(stderr, "d2r pipe: active experiment failed (errno %d)\n", errno); abort();
 }
 static void finish_call(d2r_probe_abi *s) {
+    d2r_pipe_release(s);
     pthread_mutex_lock(&window_lock);
     context.inflight--;
     if (!context.inflight) pthread_cond_broadcast(&window_changed);
@@ -237,6 +257,7 @@ void d2r_probe_close(void) {
     pthread_mutex_unlock(&window_lock);
     int failed = 0;
     if (d2r_lifecycle_close()) { failure(); failed = 1; }
+    if (d2r_pipe_close()) { failure(); failed = 1; }
     if (msync(context.header, context.capacity, MS_SYNC)) {
         failure(); failed = 1; fputs("d2r probe: trace sync failed\n", stderr);
     }
@@ -316,5 +337,6 @@ void d2r_probe_test_reset(void) {
     if (munmap(context.header, context.capacity)) abort();
     free(context.stop_path); context = (probe_context){.fd = -1};
     pthread_mutex_unlock(&window_lock);
+    d2r_pipe_test_reset();
 }
 #endif

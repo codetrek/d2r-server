@@ -2,6 +2,7 @@
 #define D2R_TRANSPORT_PROBE_INTERNAL_H
 #include "probe.h"
 #include "lifecycle.h"
+#include "relay.h"
 #define D2R_SERVER_OFFSET 0x2d7f3d8u
 #define D2R_CLIENT_OFFSET 0x2d9f438u
 #define D2R_SERVER_TABLE 0x20afb40u

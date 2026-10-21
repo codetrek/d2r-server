@@ -8,6 +8,7 @@ typedef uint64_t (*d2r_probe_frame_fn)(void);
 int d2r_probe_install(const d2r_probe_module *modules, size_t count,
                       const char *module_directory, const char *trace_path, const char *stop_path,
                       const char *lifecycle_path,
+                      const char *mode, const char *relay_read_fd, const char *relay_write_fd,
                       d2r_probe_frame_fn frame);
 void d2r_probe_close(void);
 

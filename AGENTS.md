@@ -18,6 +18,9 @@
 
 - Target four modified iPhone clients per room, fresh phone-local characters on
   each admission, and Linux/Docker deployment. The game worker CPU is undecided.
+  Device acceptance uses one physical iPhone plus an iOS simulator, as explicitly
+  requested. Capacity acceptance still requires four distinct clients; simulator
+  build and runtime qualification remain separate work.
 - G0–G5 remain unpassed. A fixed macOS ARM64 full-client single-player baseline
   has entered a world, advanced 159 ticks, saved through the normal exit path,
   and returned to the menu. A separately built native observer later recorded a
@@ -29,7 +32,11 @@
   stability is unqualified. Later lifecycle windows advanced 205/213 ticks under
   ordinary and one-analysis conditions; both state files were closed and eligible,
   with no pending error. The first disconnect remains unresolved. These windows
-  do not qualify Linux, a room worker, two-process transport, or multiplayer.
+  do not qualify Linux, a room worker, two-Guest transport, or multiplayer.
+  A later owned-pipe experiment completed 675 exact frames (89 C2S / 586 S2C),
+  actual movement and normal save-exit with both processes reaped at exit 0.
+  It has one actual Game world and one byte-relay child, not a second Game.
+  Keep owned_pipe_roundtrip qualification distinct from two_guest_transport.
 - Preserve the exact fixture, host, shader-chain, and run receipt identities.
   Source inspection, reconstructed bytes, Go cross-compilation, synthetic fixture
   tests, and container checks cannot substitute for game runtime qualification.
@@ -47,7 +54,8 @@
   demonstrated purpose. Use `make` so caches and temporary files stay in `.tmp`.
 - Run `make check` and checks relevant to changed platform code. `make check`
   runs command tests separately from core coverage, without duplicating tests.
-  `make build` and cross-build include the compact `d2r-trace` reader.
+  Build and cross-build produce four Go tools: control service, inspector, trace
+  reader and bounded pipe relay. The production worker remains unavailable.
 - Python fixture tooling lives in `tools/mac-fixture/` and uses uv with its
   committed lockfile. Run `make fixture-test` for locked Python 3.12 synthetic
   tests. Keep uv, Python installations, environments, and caches under `.tmp`.
@@ -67,6 +75,11 @@
 - Record primary-source links for non-obvious platform and function-address
   assumptions. Preserve TLS/SVC wrappers, guest thread context, and buffer
   lifetimes; analysis-body offsets are not standalone ABI call entries.
+- Require explicit `D2R_PROBE_MODE=observe|relay`. Observe rejects relay FDs;
+  relay requires owned inherited directional pipe endpoints. Keep a single
+  absolute transaction deadline, exact returned-byte verification, per-call
+  ownership through original return, and per-FD SIGPIPE suppression. Child input
+  completion alone does not prove native Ack receipt or reaped success.
 - Trace v2 observes six boundaries. Only server pops contain CID4; client
   high/low pops are payload-only and do not prove state application. Historical
   transport artifacts retain their old scope. A separate lifecycle file observes
@@ -83,7 +96,12 @@
   REA sessions, local review logs, and portable tools remain ignored in `.tmp`.
 - Write user-facing documentation in Chinese. Rewrite affected documents
   coherently and synchronize all relevant docs and provenance summaries.
-- Follow the user's Git authorization rules; never add AI co-author trailers.
+- Develop server code directly on main, as explicitly requested. Mobile main
+  tracks upstream; mobile server/simulator work belongs on with-server.
+  Consolidate the existing
+  branch chain without losing code or rewriting existing main history. Main
+  pushes need authorization for each new batch; this workflow is not unlimited
+  push permission. Follow the user's Git rules and never add AI co-author trailers.
 
 ## Local research layout
 

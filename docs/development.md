@@ -2,7 +2,7 @@
 
 ## 工程状态
 
-本仓库维护服务端工具、Go 控制进程，以及后续 Linux 游戏宿主、网关、房间管理、持久化和部署代码。当前实现包括 `d2r-inspect` 双模块静态检查、`internal/guestingress` 内部入口编解码、`d2r-server` 控制进程与 `tools/mac-fixture` 私人候选/观察变体准备工具、原生观察器和 `d2r-trace`；游戏工作进程、联网游戏、SQLite 状态目录和存档恢复尚未实现。已有固定的 macOS ARM64 单机基线及独立观察变体进入世界并保存退出；历史 v1 变体完成系统/玩法逐通道输入与出队对照；当前 v2 另有 205 tick 六处采样，34/571 条下行范围与客户端高/低队列逐条一致，首次断开原因仍未解决；它不等于房间工作进程或联机。设计中的 G0–G5 均未通过。
+本仓库维护服务端工具、Go 控制进程，以及后续 Linux 游戏宿主、网关、房间管理、持久化和部署代码。当前包括双模块检查器、内部入口编解码、控制进程、私人 Mac 候选构建、六处传输与生命周期观察，以及 `d2r-relay` 所属管道子进程。最新真实游戏实验完成 675 帧逐字节往返、205 tick 移动和正常保存退出，两个进程均回收且退出 0；子进程仅转运字节，不包含第二个游戏或权威世界。Linux 游戏工作进程、两个游戏客户端共享世界、四人状态归属及存档恢复仍未通过 G0–G5。历史首次六处观察断开原因继续保持未解决。
 
 普通源码检查不需要专有输入，使用合成 Mach-O/fixups 测试 main/sdk 布局解析、失败条件、来源摘要、输出发布和命令行行为。Python 准备工具测试同样只使用合成数据。内部入口测试使用合成载荷核对精确字节、声明长度、截断/尾随数据、整数范围及独立字节归属。控制进程测试核对健康、未就绪与能力声明。游戏实测必须另有私有验证记录，不能用 Go 测试或跨平台编译替代。
 
@@ -14,7 +14,8 @@
 | `internal/guestlayout/` | 显式选择 main/sdk 的 Mach-O/fixups 校验、映像重建、schema 2 来源清单和新目录发布。 |
 | `internal/guestingress/` | 单条内部队列项和接收缓冲区的精确编解码与自有字节副本。 |
 | `internal/transporttrace/`、`internal/lifecycletrace/`、`cmd/d2r-trace/` | 传输 trace v2 与独立状态 trace v1 的有界读取、完整性判据和紧凑报告；不推定断开原因。 |
-| `native/transport-probe/` | 固定六处传输画像、UI/tick 宿主回调包装、原始状态快照及双文件结束屏障。 |
+| `native/transport-probe/` | 固定六处传输画像、UI/tick 回调、状态快照、自有回送数据替换及结束屏障。 |
+| `internal/piperelay/`、`cmd/d2r-relay/` | 严格有界的管道编解码、完整缓冲回送与输入完成报告；无网络、游戏或玩家会话。 |
 | `cmd/d2r-server/` | 控制服务入口与关闭生命周期。 |
 | `internal/control/` | 健康、就绪和能力查询 HTTP 处理及请求日志。 |
 | `tools/mac-fixture/` | uv 锁定的 Python 私人 Mac 基线与观察变体构建工具，均不执行游戏。 |
@@ -41,6 +42,7 @@ Linux 平台适配、服务端调度、网关和持久化归本仓库。[手机 
 - `runtime_qualification.guest_execution: true` 只对应已实际执行的 `macos-arm64` / `full_client_singleplayer` 基线，固定候选清单、宿主、着色器链、159 tick 和正常保存退出记录。
 - `game_worker_qualified`、`linux_game_worker`、`multiplayer` 和 `two_process_transport` 保持 `false`，`gates_passed` 为空；检查器或准备工具成功不能修改这些运行结论。
 - `bounded_observer` 保留历史 v1 的 213 tick 窗口；`bounded_client_observer` 另行固定 v2 的 205 tick 诊断窗口和初次断开未解决状态。两者不覆盖基线，也不证明观察稳定性、工作进程或 G0。
+- `owned_pipe_roundtrip` 单独记录一个真实游戏与所属字节转运进程的 675 帧实际往返；它不能把 `two_process_transport`、`two_guest_transport_qualified` 或 G0 变成 true。
 - 锁文件是静态来源摘要，程序不读取它来决定可用能力。正常单机保存不证明崩溃或断电恢复。
 
 升级时先比较源码、补丁、映像布局及游戏构建，保留旧版本已验证的来源记录，再用新输入重新生成清单并完成受到影响的门槛验证。完整源码提交、Guest 与 fixups 哈希、资源与规则摘要及兼容性约定都要一起核对。只有获得新的验证记录后，才整体重写锁定文件及关联设计、研究和开发文档。当前不存在必须由代码兼容的旧服务端协议或持久化格式。
@@ -63,9 +65,10 @@ make build
 | `make test` | 全部 Go 包的独立竞态测试。 |
 | `make coverage` | 使用固定 `go-cov` 版本，对核心包执行竞态及覆盖率门槛检查。 |
 | `make fixture-test` | 使用 uv `--locked`、Python 3.12 运行准备工具的纯合成测试。 |
-| `make build` | 在 `bin/` 输出控制进程、模块检查器和 `d2r-trace`。 |
-| `make cross-build` | 在 `.tmp/cross/` 输出 Linux `amd64` / `arm64` 的三个 Go 工具。 |
-| `make native-probe-test` | 仅 Darwin ARM64 的原生合成 ABI/观察/关闭屏障测试。 |
+| `make build` | 在 `bin/` 输出控制进程、模块检查器、`d2r-trace` 和 `d2r-relay`。 |
+| `make cross-build` | 在 `.tmp/cross/` 输出 Linux `amd64` / `arm64` 的四个 Go 工具。 |
+| `make relay-build` | 单独构建所属管道子进程。 |
+| `make native-probe-test` | Darwin ARM64 的 ABI、观察、生命周期、实际 Go 子进程、期限和关闭屏障合成测试。 |
 | `make docker-test` | 在固定 Linux Go 镜像内执行全部源码竞态测试和 `go vet`。 |
 | `make docker-build` | 构建包含静态 Go 工具的非 root `scratch` 镜像。 |
 
@@ -75,9 +78,9 @@ CI 设置 Linux 和 macOS 的 `check` / `cross-build` 通道、Linux/macOS 的 P
 
 2026-10-20 的基础设施基线已通过 `make check`、`make build`、Linux amd64/arm64 交叉构建，以及 Docker 中 Linux ARM64 的全包竞态测试和 `go vet`，当时核心包总覆盖率为 88.2%。对应最终镜像以默认非 root 身份启动，健康、未就绪及能力响应正确，正常停止状态码为 0；镜像内检查工具使用自有输入重建出历史一致映像，私人记录位于 `.tmp/container-validation/verification.json`。
 
-本次 main/sdk 与候选工具变更的完整 `make check` 通过，核心包总覆盖率 92.7%；逐包为 `lifecycletrace` 99.2%、`transporttrace` 96.0%、`guestlayout` 86.3%、`guestingress` 90.6%、`control` 98.3%，`d2r-trace` 命令测试覆盖率为 92.0%。`make fixture-test` 的 24 项合成测试通过，真实自有输入的准备流程另有全部 15 阶段成功记录。独立审查指出的运行元数据检查与复制之间的身份问题已经修复并复核，无未解决 critical/major。各分支 Docker 和远程 CI 必须以该分支实际结果为准，配置和历史绿色结果不代表当前变更已通过。
+历史 main/sdk 与候选工具检查的核心覆盖率为 92.7%。当前所属管道转运变更的 `make check` 通过，核心总覆盖率为 93.5%；管道包 100%、`lifecycletrace` 99.2%、`transporttrace` 96.0%，转运 CLI 测试覆盖率为 87.1%。24 项 Python 合成测试、原生实际 Go 子进程测试及 ASan/UBSan 通过；最终转运候选完成 17 个准备阶段。测试涵盖回送指针来源、嵌套存活、大于管道容量的数据、空消息区别、断管、损坏数据、绝对期限、错误 Ack 和额外响应。独立审查无未解决 critical/major。各提交的远程 CI 必须核对实际结果，历史绿色和配置本身不代表新提交已通过。
 
-最终准备候选另行在受约束的 Mac 实验中运行，进入本地世界推进 159 tick，正常保存退出返回菜单；退出请求后记录 3 次保存提交，角色输出变化，原始备份保持不变，随后进程退出码 0。完整身份、输入保护和证据范围见 [Mac 运行报告](research/2026-10-20-mac-runtime-fixture.md)。这证明限定的 Mac 完整客户端单机路径；Linux 引擎、房间、双进程桥接、多人及故障持久化均未获资格。后续独立原生变体还完成 213 tick 实际移动，系统 62 条、玩法 26 条输入与各自有效出队逐条精确且顺序一致；原生测试、ASAN/UBSAN 及独立审查通过，记录见[原生观察报告](research/2026-10-20-native-transport-probe.md)。
+最终准备候选另行在受约束的 Mac 实验中运行，进入本地世界推进 159 tick，正常保存退出返回菜单；退出请求后记录 3 次保存提交，角色输出变化，原始备份保持不变，随后进程退出码 0。完整身份、输入保护和证据范围见 [Mac 运行报告](research/2026-10-20-mac-runtime-fixture.md)。这证明限定的 Mac 完整客户端单机路径；Linux 引擎、房间、两个游戏客户端的桥接、多人及故障持久化均未获资格。后续独立原生变体还完成 213 tick 实际移动，系统 62 条、玩法 26 条输入与各自有效出队逐条精确且顺序一致；原生测试、ASAN/UBSAN 及独立审查通过，记录见[原生观察报告](research/2026-10-20-native-transport-probe.md)。
 
 控制进程的 `/healthz` 表示进程存活，`/readyz` 在引擎未通过资格验证时返回 503。`/api/v1/capabilities` 当前返回 `game_worker: "unavailable"`、`multiplayer_available: false` 和计划约束 `target_max_players_per_room: 4`。普通源码与容器检查不替代私有引擎和真实设备集成记录。
 
@@ -107,11 +110,19 @@ TVFS 的 133,200 条路径不代表所有内容档案都存在；已验证的 3,
 
 采样固定 Darwin ARM64 画像并保留原方法参数、返回及 `x8` 间接结果。发送只记调用尝试，原忽略路径不读描述符；出队先检查有效字节，空结果不读未初始化内容。实际 trace 仅写私人目录，禁止网络，输入和参考备份受只读约束。
 
-运行显式提供 `D2R_PROBE_STOP_PATH`，在游戏与保存退出断言达到后创建所属标记；观察器关闭新准入并等待在途原方法和出队复制完成，发布 `CLOSED` 后控制方才结束宿主。区间外继续纯转发，不能依赖宿主 `_exit` 调用 atexit。文件完整性只覆盖声明窗口。
+运行必须显式提供 `D2R_PROBE_MODE=observe|relay`，并提供 `D2R_PROBE_STOP_PATH`，在游戏与保存退出断言达到后创建所属标记；观察器关闭新准入并等待在途原方法和出队复制完成，发布 `CLOSED` 后控制方才结束宿主。区间外继续纯转发，不能依赖宿主 `_exit` 调用 atexit。文件完整性只覆盖声明窗口。
 
 `d2r-trace -input TRACEPATH [-format transport|lifecycle] [-report NEW_JSON]` 验证固定头、计数、记录、标志、模式与连接前缀，复用内部入口解码器；只读取提交前缀，分配受单条观察上限约束。默认读取传输 trace v2 / JSON schema 2 的六类统计；显式 `-format lifecycle` 读取独立状态 trace v1，输出两个门、嵌套、原始错误编号和首个待处理错误的有限上下文，不输出载荷、地址、玩家或无限记录表。报告文件排他创建为 0600；错误/缺口/未关闭或容量截断均不能通过，损坏和不合格退出 1。模式 1/3 错标客户端忽略的审查问题已有负例回归。
 
 历史 v1 的精确对照不证明 S2C 消费；当前 v2 增加客户端 `+0/+8` 高/低队列出队，返回范围没有 CID，不能交给服务端接收表示解码器。605 条实际下行范围在各自分桶内逐条字节有序相等，客户端出队仍不等于状态应用或跨队列全局顺序。初次断开和后续两项转调对照、成功诊断的完整范围见[客户端出队报告](research/2026-10-21-s2c-client-consumption.md)。`capture_integrity_eligible` 不修改 G0 或生产引擎资格。原生传输格式和 ABI 以[格式文档](../native/transport-probe/format.md)为准；状态语义和双文件关闭见[状态格式](../native/transport-probe/lifecycle.md)及[两个实际窗口](research/2026-10-21-lifecycle-observation.md)。共享状态位不是错误独占标志，读取器使用非零待处理期限判定，原程序计时保持原值。
+
+## 所属管道转运与后续设备验证
+
+主动模式还要求两个所属的继承管道描述符 `D2R_RELAY_READ_FD`、`D2R_RELAY_WRITE_FD`；观察模式要求它们不存在。原生将实际回送的自有范围交给原方法，逐字节核对后才发布参数，数据和描述符保留到完整原方法返回。关闭依次核对 Close、请求 EOF、报告、Ack、响应 EOF；监督方另行回收子进程并要求退出 0。协议类型与 trace 类别的编号不同，映射必须明确。1 MiB 等上限只限定实验资源，不表示游戏能接受任意同等大小的网络输入。
+
+[真实转运报告](research/2026-10-21-owned-pipe-relay.md)记录 675 帧、63/26 条系统/玩法输入与 34/552 条高/低下行范围的逐条有序对照，以及移动、保存和双进程退出。它只证明一个游戏与一个字节转运子进程，后续仍需两个原游戏客户端连接单一权威世界。设备验收采用一台真实 iPhone 与一台 iOS 模拟器，模拟器需要独立构建与运行资格；容量验收仍需四个独立客户端。
+
+按用户最新要求，服务端仓库直接在 `main` 开发；手机仓库的 `main` 跟进上游，联机和模拟器适配使用 `with-server` 分支。每批新提交的主线推送仍遵守单独授权，已合并工作区的历史输入依赖在迁移核对前保留。
 
 ## 输出目录的原子发布
 

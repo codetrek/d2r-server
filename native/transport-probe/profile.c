@@ -105,7 +105,8 @@ int d2r_probe_open_captures(uint8_t *base, const char *trace_path,
 }
 int d2r_probe_install(const d2r_probe_module *modules, size_t count,
                       const char *directory, const char *trace_path, const char *stop_path,
-                      const char *lifecycle_path, d2r_probe_frame_fn frame) {
+                      const char *lifecycle_path, const char *mode,
+                      const char *relay_read_fd, const char *relay_write_fd, d2r_probe_frame_fn frame) {
     if (!directory || !*directory || !trace_path || !*trace_path) { errno = EINVAL; return -1; }
     int dir = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (dir < 0) return -1;
@@ -116,6 +117,7 @@ int d2r_probe_install(const d2r_probe_module *modules, size_t count,
     if (result) { errno = error; return -1; }
     uint8_t *base;
     if (runtime_matches(modules, count, &base)) return -1;
+    if (d2r_pipe_configure(mode, relay_read_fd, relay_write_fd)) return -1;
     /* Address points have negative Itanium headers. Preserve the complete known
      * tables and leave the secondary subobject's original vptr untouched.
      * https://github.com/itanium-cxx-abi/cxx-abi/blob/fae5e46c86147a457a057c6372fa95ec38209fe8/abi.html#L1284 */
