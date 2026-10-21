@@ -200,7 +200,7 @@ static void profile_rejections(void) {
     modules[1].size = D2R_SDK_SIZE;
     assert(d2r_probe_test_profile(modules, 2) == -1);
     modules[1].name = "main"; assert(d2r_probe_test_profile(modules, 2) == -1);
-    assert(d2r_probe_install(NULL, 0, NULL, NULL, NULL, frame) == -1);
+    assert(d2r_probe_install(NULL, 0, NULL, NULL, NULL, NULL, frame) == -1);
     assert(d2r_probe_validate_stop(NULL, "trace") == -1);
     assert(d2r_probe_validate_stop("relative-stop", "trace") == -1);
     assert(d2r_probe_validate_stop(path, path) == -1);

@@ -22,13 +22,16 @@
     "integration.c",
     "profile.c",
     "observer.c",
-    "shims.S"
+    "shims.S",
+    "lifecycle.c",
+    "gate.c"
   ],
   "build_headers": [
     "format.h",
     "abi.h",
     "probe.h",
-    "internal.h"
+    "internal.h",
+    "lifecycle.h"
   ],
   "integration_source": "integration.c",
   "main_translation_unit_define": "run_module_inits=d2r_observed_run_module_inits",
@@ -42,11 +45,17 @@
     "d2r_probe_system_pop",
     "d2r_probe_gameplay_pop",
     "d2r_probe_client_high_pop",
-    "d2r_probe_client_low_pop"
+    "d2r_probe_client_low_pop",
+    "gate_obs_set",
+    "d2r_upstream_gate_obs_set"
   ],
   "required_environment": [
     "D2R_PROBE_MODULES",
     "D2R_TRANSPORT_TRACE",
-    "D2R_PROBE_STOP_PATH"
-  ]
+    "D2R_PROBE_STOP_PATH",
+    "D2R_LIFECYCLE_TRACE"
+  ],
+  "hle_translation_unit_define": "gate_obs_set=d2r_upstream_gate_obs_set",
+  "gate_set_symbol": "gate_obs_set",
+  "original_gate_set_symbol": "d2r_upstream_gate_obs_set"
 }

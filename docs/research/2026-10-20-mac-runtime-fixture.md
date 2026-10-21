@@ -99,7 +99,7 @@ C1 元数据按实际 MSL 与当前链重新生成，并与 `shader_map.tsv`、�
 
 ## 构建检查与下一项验证
 
-本基线变更时的 `make check` Go 核心覆盖率为 **88.6%**；`guestlayout` 为 86.3%、`guestingress` 为 90.6%、`control` 为 98.3%。当时 `make fixture-test` 的 17 项 Python 合成测试通过；后续观察工具的当前测试与 23 项结果见[开发说明](../development.md)。CI 已配置固定版本的 uv 和 Python 3.12，在 Linux/macOS 上运行纯合成准备工具测试；本分支远程 CI 结果应按实际运行单独核对，配置不代表已通过。
+本基线变更时的 `make check` Go 核心覆盖率为 **88.6%**；`guestlayout` 为 86.3%、`guestingress` 为 90.6%、`control` 为 98.3%。当时 `make fixture-test` 的 17 项 Python 合成测试通过；后续观察工具的当前测试与 24 项结果见[开发说明](../development.md)。CI 已配置固定版本的 uv 和 Python 3.12，在 Linux/macOS 上运行纯合成准备工具测试；本分支远程 CI 结果应按实际运行单独核对，配置不代表已通过。
 
 公开准备工具的便携输入命令及依赖说明见[工具文档](../../tools/mac-fixture/README.md)，仓库缓存和测试入口见[开发说明](../development.md)。准备完成后没有自动启动游戏的命令。
 

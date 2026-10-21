@@ -216,10 +216,17 @@ int d2r_probe_trace_start(const char *path, size_t capacity, void *server, void 
 void d2r_probe_installed(void) {
     __atomic_fetch_or(&context.header->flags, D2R_TRACE_INSTALLED | D2R_TRACE_PROFILE_MATCHED, __ATOMIC_RELEASE);
 }
+uint64_t d2r_probe_sequence(void) {
+    return __atomic_load_n(&context.header->records, __ATOMIC_RELAXED);
+}
 void d2r_probe_close(void) {
     pthread_mutex_lock(&window_lock);
     if (!context.header || context.phase == WINDOW_CLOSED) {
         pthread_mutex_unlock(&window_lock); return;
+    }
+    if (d2r_lifecycle_callback_active() ||
+        (context.inflight && thread_id() == context.header->owner_thread)) {
+        failure(); pthread_mutex_unlock(&window_lock); errno = EDEADLK; return;
     }
     if (context.phase == WINDOW_CLOSING) {
         while (context.phase != WINDOW_CLOSED) pthread_cond_wait(&window_changed, &window_lock);
@@ -229,6 +236,7 @@ void d2r_probe_close(void) {
     while (context.inflight) pthread_cond_wait(&window_changed, &window_lock);
     pthread_mutex_unlock(&window_lock);
     int failed = 0;
+    if (d2r_lifecycle_close()) { failure(); failed = 1; }
     if (msync(context.header, context.capacity, MS_SYNC)) {
         failure(); failed = 1; fputs("d2r probe: trace sync failed\n", stderr);
     }

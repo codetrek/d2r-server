@@ -12,8 +12,73 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/codetrek/d2r-server/internal/lifecycletrace"
 	"github.com/codetrek/d2r-server/internal/transporttrace"
 )
+
+func lifecycleFile(t *testing.T) string {
+	t.Helper()
+	transport, err := os.ReadFile(traceFile(t, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := make([]byte, lifecycletrace.HeaderSize)
+	copy(b, "D2RLC001")
+	binary.LittleEndian.PutUint32(b[8:], 1)
+	binary.LittleEndian.PutUint32(b[12:], lifecycletrace.HeaderSize)
+	binary.LittleEndian.PutUint64(b[16:], lifecycletrace.Capacity)
+	binary.LittleEndian.PutUint64(b[24:], lifecycletrace.HeaderSize)
+	binary.LittleEndian.PutUint64(b[72:], 7)
+	binary.LittleEndian.PutUint64(b[80:], 42)
+	binary.LittleEndian.PutUint64(b[88:], lifecycletrace.RecordSize)
+	binary.LittleEndian.PutUint64(b[96:], 1)
+	binary.LittleEndian.PutUint64(b[104:], 2)
+	copy(b[112:176], transport[112:176])
+	p := filepath.Join(t.TempDir(), "lifecycle.trace")
+	f, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(b); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(lifecycletrace.Capacity); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestLifecycleFormatIsExplicitAndNeverEstablishesCause(t *testing.T) {
+	input := lifecycleFile(t)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-input", input, "-format", "lifecycle"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("code %d: %s", code, &stderr)
+	}
+	var report lifecycletrace.Report
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !report.CaptureIntegrityEligible || report.CauseEstablished || report.G0Qualified || report.GameWorkerQualified || len(report.Gates) != 2 {
+		t.Fatalf("wrong lifecycle qualification: %+v", report)
+	}
+	for _, args := range [][]string{
+		{"-input", input},
+		{"-input", traceFile(t, true), "-format", "lifecycle"},
+		{"-input", input, "-format", "unknown"},
+	} {
+		stdout.Reset()
+		stderr.Reset()
+		if code := run(args, &stdout, &stderr); code == 0 {
+			t.Fatalf("accepted mismatched or unsupported format: %v", args)
+		}
+	}
+	if err := process(input, "", brokenWriter{}, readLifecycle); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("lifecycle report write error was lost: %v", err)
+	}
+}
 
 func traceFile(t *testing.T, closed bool) string {
 	t.Helper()
@@ -149,7 +214,7 @@ func TestIncompleteCaptureStillReportsAndFails(t *testing.T) {
 func TestOutputFailures(t *testing.T) {
 	input := traceFile(t, true)
 	var stderr bytes.Buffer
-	if err := process(input, "", brokenWriter{}); !errors.Is(err, io.ErrClosedPipe) {
+	if err := process(input, "", brokenWriter{}, readTransport); !errors.Is(err, io.ErrClosedPipe) {
 		t.Fatalf("stdout error chain %v", err)
 	}
 	if code := run([]string{"-input", input, "-report", filepath.Join(t.TempDir(), "missing", "out.json")}, io.Discard, &stderr); code != 1 {

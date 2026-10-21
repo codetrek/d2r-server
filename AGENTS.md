@@ -26,7 +26,10 @@
   local observation, not cross-channel global ordering. A later six-seam v2
   window advanced 205 ticks and matched 34 high / 571 low S2C ranges to client dequeues. Its
   first run disconnected; the cause remains unresolved and observational
-  stability is unqualified. These windows do not qualify Linux, a room worker, two-process transport, or multiplayer.
+  stability is unqualified. Later lifecycle windows advanced 205/213 ticks under
+  ordinary and one-analysis conditions; both state files were closed and eligible,
+  with no pending error. The first disconnect remains unresolved. These windows
+  do not qualify Linux, a room worker, two-process transport, or multiplayer.
 - Preserve the exact fixture, host, shader-chain, and run receipt identities.
   Source inspection, reconstructed bytes, Go cross-compilation, synthetic fixture
   tests, and container checks cannot substitute for game runtime qualification.
@@ -48,7 +51,9 @@
 - Python fixture tooling lives in `tools/mac-fixture/` and uses uv with its
   committed lockfile. Run `make fixture-test` for locked Python 3.12 synthetic
   tests. Keep uv, Python installations, environments, and caches under `.tmp`.
-  The probe builder only prepares an independent `built_unexecuted` variant.
+  The probe builder separately compiles original main.c and hle.c with isolated
+  rename macros, verifies both objects, and only prepares an independent
+  `built_unexecuted` variant.
   `make native-probe-test` requires Darwin ARM64 and uses synthetic originals;
   run the relevant native/sanitizer checks when changing observer code.
 - The fixture preparation command builds a private candidate and never executes
@@ -64,7 +69,11 @@
   lifetimes; analysis-body offsets are not standalone ABI call entries.
 - Trace v2 observes six boundaries. Only server pops contain CID4; client
   high/low pops are payload-only and do not prove state application. Historical
-  v1 artifacts retain their old scope. Native traces describe attempts and
+  transport artifacts retain their old scope. A separate lifecycle file observes
+  pre/post host callbacks, never complete Guest bodies. Use explicit lifecycle
+  format selection; raw shared state BA1 alone does not mean an error. Keep both
+  capture files closed before ending a qualified observation. Recheck stop-path
+  absence after capture creation; aliases must not stop the run prematurely. Native traces describe attempts and
   postpop observations, never proven network
   deliveries. Require explicit `D2R_PROBE_STOP_PATH` capture admission closure
   and draining; the host uses `_exit`, so atexit cannot close the capture. Keep

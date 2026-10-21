@@ -89,10 +89,24 @@ static int runtime_matches(const d2r_probe_module *modules, size_t count, uint8_
     *base = b;
     return 0;
 }
+int d2r_probe_open_captures(uint8_t *base, const char *trace_path,
+                            const char *lifecycle_path, const char *stop_path,
+                            const uintptr_t targets[D2R_TRACE_KIND_COUNT], d2r_probe_frame_fn frame) {
+    if (d2r_probe_validate_stop(stop_path, trace_path) ||
+        d2r_probe_validate_stop(stop_path, lifecycle_path)) return -1;
+    if (d2r_probe_trace_start(trace_path, D2R_TRACE_CAPACITY, base + D2R_SERVER_OFFSET,
+                              base + D2R_CLIENT_OFFSET, targets, frame)) return -1;
+    if (d2r_lifecycle_start(base, D2R_MAIN_SIZE, lifecycle_path, frame, d2r_probe_sequence) ||
+        d2r_probe_validate_stop(stop_path, trace_path)) {
+        int error = errno;
+        d2r_probe_close(); errno = error; return -1;
+    }
+    return 0;
+}
 int d2r_probe_install(const d2r_probe_module *modules, size_t count,
-                      const char *directory, const char *trace_path, const char *stop_path, d2r_probe_frame_fn frame) {
+                      const char *directory, const char *trace_path, const char *stop_path,
+                      const char *lifecycle_path, d2r_probe_frame_fn frame) {
     if (!directory || !*directory || !trace_path || !*trace_path) { errno = EINVAL; return -1; }
-    if (d2r_probe_validate_stop(stop_path, trace_path)) return -1;
     int dir = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (dir < 0) return -1;
     int result = digest_matches(dir, "main.patched.bin", D2R_MAIN_SIZE, d2r_main_hash);
@@ -108,8 +122,8 @@ int d2r_probe_install(const d2r_probe_module *modules, size_t count,
     uintptr_t targets[D2R_TRACE_KIND_COUNT];
     prepare_clones((uintptr_t *)(base + D2R_SERVER_TABLE - 16),
                    (uintptr_t *)(base + D2R_CLIENT_TABLE - 16), targets);
-    if (d2r_probe_trace_start(trace_path, D2R_TRACE_CAPACITY, base + D2R_SERVER_OFFSET,
-                              base + D2R_CLIENT_OFFSET, targets, frame)) return -1;
+    if (d2r_probe_open_captures(base, trace_path, lifecycle_path, stop_path, targets, frame)) return -1;
+    d2r_lifecycle_profile_matched();
     __atomic_store_n((uintptr_t *)(base + D2R_SERVER_OFFSET), (uintptr_t)(server_clone + 2), __ATOMIC_RELEASE);
     __atomic_store_n((uintptr_t *)(base + D2R_CLIENT_OFFSET), (uintptr_t)(client_clone + 2), __ATOMIC_RELEASE);
     d2r_probe_installed();
